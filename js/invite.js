@@ -31,7 +31,7 @@
     if (!raw || typeof raw !== 'object' || raw.v !== VERSION) return null;
     if (raw.m !== 'single' && raw.m !== 'multi') return null;
     if (!Number.isInteger(raw.b) || raw.b < 6 || raw.b > 30) return null;
-    if (raw.s && raw.s.difficulty === 'legend' && raw.b < 11) return null; // Legend's teens need room
+    if (raw.s && raw.s.difficulty === 'legend' && raw.b < 12) return null; // Legend's teens need room
     if (!Array.isArray(raw.p)) return null;
     const count = raw.p.length;
     if (raw.m === 'single' ? count !== 1 : count < 2 || count > 4) return null;

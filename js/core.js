@@ -156,13 +156,35 @@
   // dice differ; Master weights each fact). Easy/Medium/Hard use createDice.
   const usesPairDice = (difficulty) => ['tricky', 'master', 'legend'].includes(difficulty);
 
+  // Legend: about 1 roll in LEGEND_TEEN_SHARE is a teen × 2–9; the rest are
+  // Tricky's facts. All-teen games filled the board in 3–8 rectangles.
+  const LEGEND_TEEN_SHARE = 1 / 2;
+  const PAIR_ROOM = 1 / 6; // share of the board a "comfortable" rectangle covers
+
   // weight(a, b): how likely a roll is (Master: weak facts more), default even.
   // Pairs that can't fit the board at all are left out (Legend on small boards).
   function createPairDice(boardSize, rng = Math.random, difficulty = 'tricky', weight = null) {
-    const { a: A, b: B } = diceFaces(difficulty);
-    const pairs = [];
-    for (const a of A) for (const b of B) if (a <= boardSize && b <= boardSize) pairs.push([a, b]);
-    const w = weight || (() => 1);
+    const fits = ([a, b]) => a <= boardSize && b <= boardSize;
+    const cross = ({ a: A, b: B }) => A.flatMap((a) => B.map((b) => [a, b])).filter(fits);
+    // Like the loaded dice: big rectangles are rarer on smaller boards, so a
+    // game lasts about as long as on Hard (big facts still come up, just less).
+    const roomy = boardSize * boardSize * PAIR_ROOM;
+    const sizeBias = (a, b) => 1 / (1 + ((a * b) / roomy) ** 2);
+    const given = weight || (() => 1);
+    let pairs = cross(diceFaces(difficulty));
+    let w = (a, b) => given(a, b) * sizeBias(a, b);
+    if (difficulty === 'legend') {
+      // Each group gets its share of the rolls, with the size bias inside it
+      const isTeen = (a, b) => a >= 11 && b <= 9;
+      const teens = pairs;
+      const tricky = cross(diceFaces('tricky')).filter(([a, b]) => !isTeen(a, b)); // 12 × 7 is already a teen roll
+      pairs = [...teens, ...tricky];
+      const total = (list) => list.reduce((sum, [a, b]) => sum + sizeBias(a, b), 0);
+      const teenShare = teens.length ? LEGEND_TEEN_SHARE : 0;
+      const teenTotal = total(teens) || 1;
+      const trickyTotal = total(tricky);
+      w = (a, b) => sizeBias(a, b) * (isTeen(a, b) ? teenShare / teenTotal : (1 - teenShare) / trickyTotal);
+    }
     return {
       sides: DIFFICULTY_SIDES[difficulty],
       pairs,
@@ -176,8 +198,9 @@
     };
   }
 
-  // Can a difficulty be played on this board at all? (Legend needs 11×11 or bigger.)
-  const fitsDifficulty = (difficulty, boardSize) => !usesPairDice(difficulty) || createPairDice(boardSize, Math.random, difficulty).pairs.length > 0;
+  // Can a difficulty be played on this board? Legend needs 12×12 or bigger
+  // (smaller boards would never see a teen).
+  const fitsDifficulty = (difficulty, boardSize) => (difficulty === 'legend' ? boardSize >= 12 : !usesPairDice(difficulty) || createPairDice(boardSize, Math.random, difficulty).pairs.length > 0);
 
   // "Loaded" dice matched to the board size, so small boards aren't swallowed
   // by huge rectangles and big boards don't take ages to fill with 1x1s.
@@ -276,7 +299,11 @@
       // pair dice: near the end (or always), only pairs that fit
       if (!fitOnlyNow(board, sides, mode)) return bag.rollPair();
       const fitting = bag.pairs.filter(([a, b]) => canFit(board, a, b));
-      return fitting.length ? bag.rollPair(fitting) : bag.rollPair();
+      if (fitting.length) return bag.rollPair(fitting);
+      // None of this difficulty's facts fit the gaps left: finish the board with
+      // smaller facts (up to 12 × 12) rather than ending it half empty.
+      const small = fittingRolls(board, 12);
+      return small.length ? small[Math.floor(rng() * small.length)] : bag.rollPair();
     }
     if (!fitOnlyNow(board, sides, mode)) return [bag.roll(), bag.roll()];
     const fitting = fittingRolls(board, sides);
@@ -305,6 +332,7 @@
     chooseComputerMove,
     rollDie,
     DIFFICULTIES,
+    LEGEND_TEEN_SHARE,
     DIFFICULTY_SIDES,
     TRICKY_FACES,
     diceFaces,

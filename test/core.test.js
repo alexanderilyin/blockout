@@ -213,13 +213,19 @@ test('difficulties after Hard: Tricky, Master and Legend dice', () => {
     const [a, b] = tricky.rollPair();
     assert.ok(Core.TRICKY_FACES.includes(a) && Core.TRICKY_FACES.includes(b), `${a} × ${b}`);
   }
-  // Legend: a teen times 2–9, and only on a board it fits
-  const legend = Core.createPairDice(12, Math.random, 'legend');
-  for (let i = 0; i < 200; i++) {
+  // Legend: teen × 2–9 for about LEGEND_TEEN_SHARE of the rolls, Tricky's facts otherwise
+  const legend = Core.createPairDice(20, Math.random, 'legend');
+  let teens = 0;
+  for (let i = 0; i < 2000; i++) {
     const [a, b] = legend.rollPair();
-    assert.ok(a >= 11 && a <= 12 && b >= 2 && b <= 9, `${a} × ${b}`);
+    const teen = a >= 11 && a <= 19 && b >= 2 && b <= 9;
+    if (teen) teens++;
+    else assert.ok(Core.TRICKY_FACES.includes(a) && Core.TRICKY_FACES.includes(b), `${a} × ${b}`);
   }
+  assert.ok(Math.abs(teens / 2000 - Core.LEGEND_TEEN_SHARE) < 0.05, `teen share ${teens / 2000}`);
   assert.equal(Core.fitsDifficulty('legend', 8), false);
+  assert.equal(Core.fitsDifficulty('legend', 10), false);
+  assert.equal(Core.fitsDifficulty('legend', 12), true);
   assert.equal(Core.fitsDifficulty('legend', 20), true);
   assert.equal(Core.fitsDifficulty('hard', 6), true);
   // Master: the weight picks the facts
@@ -231,4 +237,35 @@ test('difficulties after Hard: Tricky, Master and Legend dice', () => {
   const board = Core.createBoard(12);
   const roll = Core.rollForBoard(board, tricky, Math.random, 'always');
   assert.ok(Core.TRICKY_FACES.includes(roll[0]));
+});
+
+// Plays a CPU-vs-CPU game with the difficulty's dice; returns how many rectangles went down.
+function playOut(size, difficulty) {
+  const board = Core.createBoard(size);
+  const bag = Core.usesPairDice(difficulty) ? Core.createPairDice(size, Math.random, difficulty) : Core.createDice(size, Math.random, Core.DIFFICULTY_SIDES[difficulty]);
+  let passes = 0;
+  let placed = 0;
+  while (passes < 2 && Core.emptyCount(board) > 0) {
+    const [a, b] = Core.rollForBoard(board, bag, Math.random, 'end');
+    const move = Core.chooseComputerMove(board, a, b);
+    if (!move) {
+      passes++;
+      continue;
+    }
+    passes = 0;
+    Core.place(board, move.x, move.y, move.w, move.h, placed % 2);
+    placed++;
+  }
+  return placed;
+}
+
+test('Tricky, Master and Legend games last about as long as Hard (not 3 rectangles)', () => {
+  for (const difficulty of ['tricky', 'master', 'legend']) {
+    let total = 0;
+    for (let i = 0; i < 30; i++) total += playOut(12, difficulty);
+    assert.ok(total / 30 >= 7, `${difficulty} on 12×12: ${total / 30} rectangles`);
+    total = 0;
+    for (let i = 0; i < 20; i++) total += playOut(24, difficulty);
+    assert.ok(total / 20 >= 16, `${difficulty} on 24×24: ${total / 20} rectangles`);
+  }
 });

@@ -284,7 +284,7 @@
     // After Hard: harder facts rather than bigger numbers (see Core.diceFaces)
     { id: 'difficulty.tricky', group: 'Difficulty', name: 'Tricky: no easy facts (no ×1, ×2, ×5, ×10, ×11)', price: 700, requires: 'difficulty.hard', mastery: { size: 12, share: 0.75 } },
     { id: 'difficulty.master', group: 'Difficulty', name: 'Master: the dice go after your weakest facts', price: 900, requires: 'difficulty.tricky', mastery: { faces: Core.TRICKY_FACES, share: 0.75 } },
-    { id: 'difficulty.legend', group: 'Difficulty', name: 'Legend: two-digit × one-digit (like 14 × 7)', price: 1200, requires: 'difficulty.master', mastery: { size: 12, share: 0.9 } },
+    { id: 'difficulty.legend', group: 'Difficulty', name: 'Legend: two-digit × one-digit (like 14 × 7) mixed with Tricky facts', price: 1200, requires: 'difficulty.master', mastery: { size: 12, share: 0.9 } },
     // Placing rectangles: Click first, then Auto (drawing is free)
     { id: 'placeMode', group: 'Settings', name: 'Placing: click to place', price: 40 },
     { id: 'placeAuto', group: 'Settings', name: 'Placing: auto (placed for you)', price: 60, requires: 'placeMode' },

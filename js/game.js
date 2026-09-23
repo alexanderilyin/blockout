@@ -1218,7 +1218,7 @@
     }
     const bonus = Progress.boardFinishBonus(setup.size);
     if (settings.difficulty === 'legend' && setup.size < 19 && setup.mode !== 'practice') {
-      el.boardSizeHelp.textContent = `On ${setup.size}×${setup.size}, Legend rolls up to ${setup.size} × 9. Bigger boards bring bigger teens (all the way to 19 on 20×20).`;
+      el.boardSizeHelp.textContent = `Legend: half the rolls are teens like 14 × 7, the rest are Tricky facts. On ${setup.size}×${setup.size} the teens go up to ${setup.size}; bigger boards bring bigger teens (all the way to 19 on 20×20).`;
       return;
     }
     el.boardSizeHelp.textContent = bonus
