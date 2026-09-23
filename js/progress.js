@@ -15,7 +15,8 @@
       checkIn: { last: null, streak: 0 },
       facts: {}, // player key -> { name, facts: { '3 × 4': FactStats } }; 3 × 4 and 4 × 3 are separate
       factsOrdered: true,
-      counters: { games: 0 },
+      counters: { games: 0, classGames: 0 },
+      stickers: {}, // sticker id -> how many
     };
   }
 
@@ -31,6 +32,8 @@
       unlocks: Array.isArray(saved.unlocks) ? saved.unlocks : [],
       achievements: saved.achievements || {},
       facts: saved.facts || {},
+      stickers: saved.stickers || {},
+      seen: { wardrobe: [], stickers: [], ...(saved.seen || {}) }, // for "new" badges
       factsOrdered: true,
     };
     if (!saved.factsOrdered) splitOldFacts(state.facts);
@@ -117,17 +120,18 @@
     return !id || state.unlocks.includes(id);
   }
 
-  function canBuy(state, id) {
+  function canBuy(state, id, now = new Date()) {
     const item = shopItem(id);
     if (!item) return { ok: false, reason: 'unknown' };
     if (isUnlocked(state, id)) return { ok: false, reason: 'owned' };
+    if (item.available && !item.available(now)) return { ok: false, reason: 'season', when: item.seasonLabel };
     if (item.requires && !isUnlocked(state, item.requires)) return { ok: false, reason: 'requires', requires: item.requires };
     if (state.wallet < item.price) return { ok: false, reason: 'points', missing: item.price - state.wallet };
     return { ok: true };
   }
 
-  function buy(state, id) {
-    const check = canBuy(state, id);
+  function buy(state, id, now = new Date()) {
+    const check = canBuy(state, id, now);
     if (!check.ok) return check;
     state.wallet -= shopItem(id).price;
     state.unlocks.push(id);
@@ -249,7 +253,7 @@
 
   // ---------------------------------------------------------------- achievements
 
-  // check(ctx) runs on events: 'answer', 'game', 'checkin', 'buy', 'practice'.
+  // check(ctx) runs on events: 'answer', 'game', 'checkin', 'buy', 'practice', 'class'.
   // Answer events also carry the player's facts and their table size (6, 8 or 12).
   const GENERAL_ACHIEVEMENTS = [
     { id: 'first_game', icon: '🎲', name: 'First game', desc: 'Finish your first game.', reward: 10, check: (c) => c.event === 'game' },
@@ -257,8 +261,13 @@
     { id: 'full_house', icon: '🧱', name: 'Full house', desc: 'Finish a game with the board completely full.', reward: 15, check: (c) => c.event === 'game' && c.full },
     { id: 'perfect', icon: '⭐', name: 'Perfect game', desc: 'Get every answer right first time in a game (at least 5).', reward: 40, check: (c) => c.event === 'game' && c.perfect },
     { id: 'hard_win', icon: '💪', name: 'Tough cookie', desc: 'Win a game on Hard.', reward: 60, check: (c) => c.event === 'game' && c.humanWon && c.difficulty === 'hard' },
+    { id: 'games5', icon: '🌱', name: 'Getting started', desc: 'Finish 5 games.', reward: 15, check: (c) => c.event === 'game' && c.games >= 5 },
     { id: 'games10', icon: '📅', name: 'Regular', desc: 'Finish 10 games.', reward: 30, check: (c) => c.event === 'game' && c.games >= 10 },
+    { id: 'games25', icon: '🎯', name: 'Dedicated', desc: 'Finish 25 games.', reward: 60, check: (c) => c.event === 'game' && c.games >= 25 },
     { id: 'games50', icon: '🎖️', name: 'Blockout pro', desc: 'Finish 50 games.', reward: 100, check: (c) => c.event === 'game' && c.games >= 50 },
+    { id: 'games100', icon: '💯', name: 'Century', desc: 'Finish 100 games.', reward: 200, check: (c) => c.event === 'game' && c.games >= 100 },
+    { id: 'games250', icon: '🏅', name: 'Blockout master', desc: 'Finish 250 games.', reward: 400, check: (c) => c.event === 'game' && c.games >= 250 },
+    { id: 'games500', icon: '🌟', name: 'Blockout legend', desc: 'Finish 500 games.', reward: 800, check: (c) => c.event === 'game' && c.games >= 500 },
     { id: 'streak5', icon: '🔥', name: 'Hot streak', desc: 'Get 5 answers in a row right first time.', reward: 20, check: (c) => c.event === 'answer' && c.streak >= 5 },
     { id: 'streak10', icon: '🚀', name: 'On fire', desc: 'Get 10 answers in a row right first time.', reward: 40, check: (c) => c.event === 'answer' && c.streak >= 10 },
     { id: 'speedy', icon: '⚡', name: 'Speedy', desc: 'Answer correctly in under 3 seconds.', reward: 15, check: (c) => c.event === 'answer' && c.correct && c.ms < 3000 },
@@ -269,6 +278,19 @@
     { id: 'practice', icon: '🎯', name: 'Practice makes perfect', desc: 'Finish a practice round.', reward: 10, check: (c) => c.event === 'practice' },
     { id: 'shopper', icon: '🛍️', name: 'Shopper', desc: 'Buy your first unlock in the shop.', reward: 10, check: (c) => c.event === 'buy' },
   ].map((a) => ({ ...a, group: 'General' }));
+
+  // Classroom games (everyone plays the same rolls on their own board). The end of
+  // a class game sends { event: 'class', classGames, rank, of, perfect, missed, rolls }.
+  const BIG_CLASS = 4; // placing only counts against at least this many players
+  const CLASS_ACHIEVEMENTS = [
+    { id: 'class_first', icon: '🏫', name: 'Class act', desc: 'Finish a classroom game.', reward: 15, check: (c) => c.event === 'class' },
+    { id: 'class_podium', icon: '🥉', name: 'On the podium', desc: `Finish in the top 3 of a classroom game with at least ${BIG_CLASS} players.`, reward: 30, check: (c) => c.event === 'class' && c.of >= BIG_CLASS && c.rank <= 3 },
+    { id: 'class_top', icon: '🥇', name: 'Top of the class', desc: `Come first in a classroom game with at least ${BIG_CLASS} players.`, reward: 60, check: (c) => c.event === 'class' && c.of >= BIG_CLASS && c.rank === 1 },
+    { id: 'class_perfect', icon: '🌟', name: 'Gold star', desc: 'Get every answer right first time in a classroom game (at least 5).', reward: 40, check: (c) => c.event === 'class' && c.perfect },
+    { id: 'class_every', icon: '✋', name: 'Every roll', desc: 'Keep up with every roll in a classroom game of 10 rolls or more.', reward: 20, check: (c) => c.event === 'class' && c.rolls >= 10 && c.missed === 0 },
+    { id: 'class5', icon: '📚', name: 'Class regular', desc: 'Finish 5 classroom games.', reward: 30, check: (c) => c.event === 'class' && c.classGames >= 5 },
+    { id: 'class25', icon: '🎓', name: 'Class veteran', desc: 'Finish 25 classroom games.', reward: 100, check: (c) => c.event === 'class' && c.classGames >= 25 },
+  ].map((a) => ({ ...a, group: 'Classroom' }));
 
   // One pair per times table: every fact in the line at least Learning, then all Mastered.
   const TABLE_ACHIEVEMENTS = [];
@@ -346,7 +368,7 @@
     }
   }
 
-  const ACHIEVEMENTS = [...GENERAL_ACHIEVEMENTS, ...SCORE_ACHIEVEMENTS, ...TABLE_ACHIEVEMENTS, ...FACT_SPEED_ACHIEVEMENTS];
+  const ACHIEVEMENTS = [...GENERAL_ACHIEVEMENTS, ...CLASS_ACHIEVEMENTS, ...SCORE_ACHIEVEMENTS, ...TABLE_ACHIEVEMENTS, ...FACT_SPEED_ACHIEVEMENTS];
 
   // Award every achievement this event completes; returns the new ones.
   function awardAchievements(state, ctx) {

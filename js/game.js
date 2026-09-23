@@ -4,9 +4,9 @@
   const Core = window.BlockoutCore;
   const Progress = window.BlockoutProgress;
   const Invite = window.BlockoutInvite;
+  const Cosmetics = window.BlockoutCosmetics;
   const seededRandom = Invite.seededRandom;
 
-  const COLORS = ['#e4572e', '#2e86de', '#2a9d5c', '#8e5bd6'];
   const DEFAULT_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
   const PIPS = {
     1: [4],
@@ -33,7 +33,6 @@
     cpuSteps: 'show', // 'show': CPU explains step by step; 'instant': CPU plays straight away
     autoRoll: 'manual', // 'manual': press Roll dice; 'auto': the dice roll by themselves
     fitRolls: 'end', // "no room": only roll what fits 'end' (near the end), 'always' or 'never'
-    diceStyle: 'classic', // 'golden' once the golden dice are bought
     // Times-table grid cells: 'icon' (✓ ~ !) or 'time' (best time), per status
     timesMastered: 'icon',
     timesLearning: 'icon',
@@ -55,9 +54,64 @@
     modeCards: document.querySelectorAll('.mode-card'),
     singleSetup: $('single-setup'),
     multiSetup: $('multi-setup'),
+    multiKind: $('multi-kind'),
+    localSetup: $('local-setup'),
+    classroomSetup: $('classroom-setup'),
+    classJoinOpen: $('class-join-open'),
+    classHostOpen: $('class-host-open'),
+    classOffline: $('class-offline'),
+    classJoin: $('class-join'),
+    classJoinForm: $('class-join-form'),
+    classCodeInput: $('class-code-input'),
+    classNameInput: $('class-name-input'),
+    classJoinError: $('class-join-error'),
+    classJoinBtn: $('class-join-btn'),
+    classJoinCancel: $('class-join-cancel'),
+    classWait: $('class-wait'),
+    classWaitName: $('class-wait-name'),
+    classWaitText: $('class-wait-text'),
+    classLeaveBtn: $('class-leave-btn'),
+    hostSetup: $('class-host-setup'),
+    hostSetupTitle: $('class-host-title'),
+    hostSize: $('host-size'),
+    hostDifficulty: $('host-difficulty'),
+    hostRounds: $('host-rounds'),
+    hostError: $('host-error'),
+    hostCancel: $('host-cancel'),
+    hostCreate: $('host-create'),
+    hostScreen: $('class-host-screen'),
+    hostCodeSmall: $('host-code-small'),
+    hostLobby: $('host-lobby'),
+    hostQr: $('host-qr'),
+    hostUrl: $('host-url'),
+    hostCode: $('host-code'),
+    hostSettings: $('host-settings'),
+    hostChange: $('host-change'),
+    hostStartBtn: $('host-start-btn'),
+    hostLocalHelp: $('host-local-help'),
+    hostPlay: $('host-play'),
+    hostRound: $('host-round'),
+    hostDieA: $('host-die-a'),
+    hostDieB: $('host-die-b'),
+    hostRollText: $('host-roll-text'),
+    hostDoneFill: $('host-done-fill'),
+    hostDoneText: $('host-done-text'),
+    hostNextBtn: $('host-next-btn'),
+    hostEndBtn: $('host-end-btn'),
+    hostAuto: $('host-auto'),
+    hostEnded: $('host-ended'),
+    hostPodium: $('host-podium'),
+    hostReport: $('host-report'),
+    hostHardest: $('host-hardest'),
+    hostAgainBtn: $('host-again-btn'),
+    hostClose2Btn: $('host-close2-btn'),
+    hostCloseBtn: $('host-close-btn'),
+    hostRosterTitle: $('host-roster-title'),
+    hostRoster: $('host-roster'),
     singleName: $('single-name'),
     playerCount: $('player-count'),
     nameInputs: $('name-inputs'),
+    namesError: $('names-error'),
     boardSize: $('board-size'),
     customSize: $('custom-size'),
     customSizeInput: $('custom-size-input'),
@@ -108,6 +162,21 @@
     resetHistory: $('reset-history'),
     settingsDialog: $('settings'),
     walletAmount: $('wallet-amount'),
+    wardrobeBtn: $('wardrobe-btn'),
+    unlockDialog: $('unlock'),
+    unlockTitle: $('unlock-title'),
+    unlockPrice: $('unlock-price'),
+    unlockMessage: $('unlock-message'),
+    unlockYes: $('unlock-yes'),
+    unlockNo: $('unlock-no'),
+    wardrobeDialog: $('wardrobe'),
+    wardrobeBody: $('wardrobe-body'),
+    wardrobeDone: $('wardrobe-done'),
+    stickersBtn: $('stickers-btn'),
+    stickersDialog: $('stickers'),
+    stickersBody: $('stickers-body'),
+    stickersTrade: $('stickers-trade'),
+    stickersDone: $('stickers-done'),
     gameSettingsBtn: $('game-settings-btn'),
     practiceSetup: $('practice-setup'),
     practiceName: $('practice-name'),
@@ -124,6 +193,7 @@
     practiceSettingsBtn: $('practice-settings-btn'),
     prCounter: $('pr-counter'),
     prStreak: $('pr-streak'),
+    streakBadge: $('streak-badge'),
     prBar: $('pr-bar'),
     prArray: $('pr-array'),
     prTimer: $('pr-timer'),
@@ -149,7 +219,6 @@
     shopBtn: $('shop-btn'),
     shopDialog: $('shop'),
     shopBody: $('shop-body'),
-    shopWallet: $('shop-wallet'),
     shopDone: $('shop-done'),
     achievementsBtn: $('achievements-btn'),
     achievementsDialog: $('achievements'),
@@ -193,7 +262,9 @@
   // ---------------------------------------------------------------- setup
 
   // types[i] is 'human' or 'cpu' for each multiplayer slot.
-  const setup = { mode: 'single', count: 2, size: 12, names: DEFAULT_NAMES.slice(), types: ['human', 'human', 'human', 'human'] };
+  // names start empty: multiplayer players type their own ("Player N" is only a placeholder)
+  // multiKind: 'local' (one screen) or 'classroom' (not built yet)
+  const setup = { mode: 'single', multiKind: 'local', count: 2, size: 12, names: ['', '', '', ''], types: ['human', 'human', 'human', 'human'] };
 
   // ---------------------------------------------------------------- progress (wallet, unlocks, achievements)
 
@@ -218,6 +289,31 @@
 
   function renderWallet() {
     el.walletAmount.textContent = formatPoints(progress.wallet);
+    updateMenuBadges();
+  }
+
+  // iPhone-style red count badges on the main-menu Shop, Wardrobe and Stickers buttons.
+  function updateMenuBadges() {
+    if (!Cosmetics || !el.shopBtn) return;
+    setBadge(el.shopBtn, 'Shop', affordableCount(), 'you can unlock');
+    setBadge(el.wardrobeBtn, 'Wardrobe', newWardrobe() + affordableLooks(), 'new or ready to unlock');
+    setBadge(el.stickersBtn, 'Stickers', newStickers() + spareStickers(), 'new or spare');
+  }
+
+  function setBadge(btn, label, count, what) {
+    let badge = btn.querySelector('.badge');
+    if (!count) {
+      if (badge) badge.remove();
+      btn.removeAttribute('aria-label');
+      return;
+    }
+    if (!badge) {
+      badge = make('span', 'badge');
+      badge.setAttribute('aria-hidden', 'true');
+      btn.append(badge);
+    }
+    badge.textContent = count > 99 ? '99+' : String(count);
+    btn.setAttribute('aria-label', `${label}, ${count} ${what}`);
   }
 
   // 10000 → "10,000" (in the reader's locale).
@@ -226,8 +322,16 @@
   }
 
   // Show newly earned achievements as toasts; returns them for the caller.
+  // Every big (non-minor) achievement drops one random sticker.
+  function grantStickers(earned) {
+    return earned.filter((a) => !a.minor).map(() => Cosmetics.dropSticker(progress));
+  }
+
   function celebrate(earned) {
     for (const a of earned) toast(`${a.icon} ${a.minor ? '' : 'Achievement: '}${a.name}`, `+${a.reward} points`);
+    for (const { sticker, isNew } of grantStickers(earned)) {
+      toast(`🎁 ${isNew ? 'New sticker' : 'Sticker'}: ${sticker.emoji}`, isNew ? `${sticker.rarity} · added to your album` : `a spare you can swap for points`);
+    }
     // one full-screen celebration (bigger for several), not for minor ones like fact speed
     const major = earned.filter((a) => !a.minor).length;
     if (major) confettiFullScreen(major);
@@ -239,6 +343,10 @@
   // Drawn on a see-through canvas that ignores clicks; skipped for reduced motion.
   const CONFETTI_COLORS = ['#e4572e', '#2e86de', '#2a9d5c', '#8e5bd6', '#f2c94c', '#ff8fab'];
   const confetti = { canvas: null, ctx: null, parts: [], frame: null, last: 0 };
+  // Confetti doesn't need retina sharpness; 1× keeps the full-screen canvas small and fast.
+  const CONFETTI_DPR = 1;
+  // Emoji pieces are bigger than paper, so half as many look just as full (and draw faster).
+  const pieceCount = (n) => Math.round(n * (confettiGlyphs() ? 0.5 : 1));
 
   // Make sure the canvas exists and matches the window; false when motion is reduced.
   function confettiReady() {
@@ -250,7 +358,7 @@
       document.body.append(confetti.canvas);
       confetti.ctx = confetti.canvas.getContext('2d');
     }
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = CONFETTI_DPR;
     const w = Math.round(innerWidth * dpr);
     const h = Math.round(innerHeight * dpr);
     if (confetti.canvas.width !== w || confetti.canvas.height !== h) {
@@ -261,19 +369,62 @@
     return true;
   }
 
-  function addPiece(x, y, angleDeg, speed, maxAge = 200) {
+  // Wardrobe confetti: paper, or emoji pieces (stars, hearts, snowflakes, coins…)
+  const CONFETTI_GLYPHS = {
+    stars: ['⭐', '🌟'],
+    hearts: ['💖', '💗', '❤️'],
+    snow: ['❄️'],
+    coins: ['🪙'],
+    blossom: ['🌸', '🌼'],
+  };
+  const pick = (list) => list[Math.floor(Math.random() * list.length)];
+
+  function confettiGlyphs() {
+    const kind = settings.cosmetics.confetti;
+    return kind === 'emoji' ? look('confetti').glyphs : CONFETTI_GLYPHS[kind] || null;
+  }
+
+  // Emoji drawn once per glyph and size into a small canvas, then stamped with
+  // drawImage. Drawing colour emoji as text every frame is very slow.
+  const glyphSprites = new Map();
+  function glyphSprite(glyph, size) {
+    const px = Math.round(size);
+    const key = `${glyph}|${px}`;
+    let sprite = glyphSprites.get(key);
+    if (!sprite) {
+      const dpr = CONFETTI_DPR;
+      const cssSize = Math.ceil(px * 2.6);
+      sprite = document.createElement('canvas');
+      sprite.width = sprite.height = Math.ceil(cssSize * dpr);
+      sprite.cssSize = cssSize;
+      const s = sprite.getContext('2d');
+      s.scale(dpr, dpr);
+      s.font = `${px * 2}px serif`;
+      s.textAlign = 'center';
+      s.textBaseline = 'middle';
+      s.fillText(glyph, cssSize / 2, cssSize / 2 + px * 0.1);
+      glyphSprites.set(key, sprite);
+    }
+    return sprite;
+  }
+
+  // extra: { glyphs, gravity, size } for special effects (balloons, trophies, fireworks)
+  function addPiece(x, y, angleDeg, speed, maxAge = 200, extra = {}) {
     const angle = (angleDeg * Math.PI) / 180;
+    const glyphs = extra.glyphs !== undefined ? extra.glyphs : confettiGlyphs();
     confetti.parts.push({
       x,
       y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      size: 5 + Math.random() * 6,
+      size: extra.size || (glyphs ? 9 + Math.random() * 6 : 5 + Math.random() * 6),
       spin: Math.random() * Math.PI,
-      vspin: (Math.random() - 0.5) * 0.4,
+      vspin: (Math.random() - 0.5) * (glyphs ? 0.12 : 0.4),
       wobble: Math.random() * Math.PI * 2,
-      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      color: extra.color || CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
       round: Math.random() < 0.3,
+      glyph: glyphs ? pick(glyphs) : null,
+      gravity: extra.gravity !== undefined ? extra.gravity : 0.28,
       age: 0,
       maxAge,
     });
@@ -290,11 +441,45 @@
   function confettiFrom(element, strength = 1) {
     if (!confettiReady()) return;
     const box = element.getBoundingClientRect();
-    const count = Math.min(90 + 40 * (strength - 1), 200);
+    const count = pieceCount(Math.min(90 + 40 * (strength - 1), 200));
     for (let i = 0; i < count; i++) {
       addPiece(box.left + Math.random() * box.width, box.top + box.height * 0.3, -90 + (Math.random() - 0.35) * 110, 7 + Math.random() * 9);
     }
     startConfetti();
+  }
+
+  // Winning: the Wardrobe's win celebration.
+  function celebrateWin() {
+    if (!confettiReady()) return;
+    const w = innerWidth;
+    const h = innerHeight;
+    const style = settings.cosmetics.win;
+    if (style === 'fireworks') {
+      for (let burst = 0; burst < 6; burst++) {
+        setTimeout(() => {
+          if (!confettiReady()) return;
+          const x = w * (0.15 + Math.random() * 0.7);
+          const y = h * (0.15 + Math.random() * 0.35);
+          const color = pick(CONFETTI_COLORS);
+          for (let i = 0; i < 70; i++) {
+            addPiece(x, y, (i / 70) * 360, 3 + Math.random() * 5, 90 + Math.random() * 40, { glyphs: null, gravity: 0.1, color, size: 4 });
+          }
+          startConfetti();
+        }, burst * 380);
+      }
+    } else if (style === 'balloons') {
+      for (let i = 0; i < 36; i++) {
+        addPiece(Math.random() * w, h + 20 + Math.random() * h * 0.6, -90 + (Math.random() - 0.5) * 16, 2 + Math.random() * 2.5, 520, { glyphs: ['🎈'], gravity: -0.01, size: 14 + Math.random() * 8 });
+      }
+      startConfetti();
+    } else if (style === 'trophies') {
+      for (let i = 0; i < 90; i++) {
+        addPiece(Math.random() * w, -20 - Math.random() * h * 0.9, 90 + (Math.random() - 0.5) * 20, 1 + Math.random() * 3, 420, { glyphs: ['🏆', '🪙', '⭐', '🥇'] });
+      }
+      startConfetti();
+    } else {
+      confettiFullScreen(3);
+    }
   }
 
   // Full screen: a shower from the top across the whole width, plus a cannon
@@ -303,12 +488,12 @@
     if (!confettiReady()) return;
     const w = innerWidth;
     const h = innerHeight;
-    const shower = Math.min(Math.round((w / 6) * (0.8 + 0.3 * strength)), 420);
+    const shower = pieceCount(Math.min(Math.round((w / 6) * (0.8 + 0.3 * strength)), 420));
     for (let i = 0; i < shower; i++) {
       // start above the screen at different heights so it keeps raining for a while
       addPiece(Math.random() * w, -20 - Math.random() * h * 0.9, 90 + (Math.random() - 0.5) * 30, 1 + Math.random() * 3, 420);
     }
-    const perCannon = Math.min(70 + 30 * (strength - 1), 150);
+    const perCannon = pieceCount(Math.min(70 + 30 * (strength - 1), 150));
     const reach = Math.sqrt(h) * 0.75; // strong enough to reach the upper half on any screen
     for (let i = 0; i < perCannon; i++) {
       addPiece(0, h, -60 + (Math.random() - 0.5) * 30, reach * (0.7 + Math.random() * 0.5), 300);
@@ -322,31 +507,42 @@
     confetti.last = now;
     const g = confetti.ctx;
     g.clearRect(0, 0, innerWidth, innerHeight);
-    confetti.parts = confetti.parts.filter((p) => (p.y < innerHeight + 20 || p.vy < 0) && p.age < p.maxAge);
+    confetti.parts = confetti.parts.filter((p) => (p.y < innerHeight + 20 || p.vy < 0) && p.y > -120 && p.age < p.maxAge);
+    const dpr = CONFETTI_DPR;
+    const air = Math.pow(0.985, dt);
     for (const p of confetti.parts) {
       p.age += dt;
-      p.vy += 0.28 * dt; // gravity
-      p.vx *= Math.pow(0.985, dt); // air
+      p.vy += p.gravity * dt; // gravity (balloons have a little negative gravity)
+      p.vx *= air;
       p.vy = Math.min(p.vy, 6); // paper falls slowly
       p.wobble += 0.15 * dt;
       p.x += (p.vx + Math.sin(p.wobble) * 0.8) * dt;
       p.y += p.vy * dt;
       p.spin += p.vspin * dt;
-      g.save();
+      // Position each piece with one setTransform (no save/restore per piece: much faster)
+      const cos = Math.cos(p.spin) * dpr;
+      const sin = Math.sin(p.spin) * dpr;
       g.globalAlpha = Math.min(1, (p.maxAge - p.age) / 40);
-      g.translate(p.x, p.y);
-      g.rotate(p.spin);
-      g.fillStyle = p.color;
-      if (p.round) {
+      if (p.glyph) {
+        // emoji: stamp a pre-drawn image instead of drawing the text every frame
+        const sprite = glyphSprite(p.glyph, p.size);
+        g.setTransform(cos, sin, -sin, cos, p.x * dpr, p.y * dpr);
+        g.drawImage(sprite, -sprite.cssSize / 2, -sprite.cssSize / 2, sprite.cssSize, sprite.cssSize);
+      } else if (p.round) {
+        g.setTransform(dpr, 0, 0, dpr, p.x * dpr, p.y * dpr);
+        g.fillStyle = p.color;
         g.beginPath();
         g.arc(0, 0, p.size / 2.4, 0, Math.PI * 2);
         g.fill();
       } else {
-        g.scale(1, Math.cos(p.wobble)); // flipping paper
+        const flip = Math.cos(p.wobble); // flipping paper
+        g.setTransform(cos, sin, -sin * flip, cos * flip, p.x * dpr, p.y * dpr);
+        g.fillStyle = p.color;
         g.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
       }
-      g.restore();
     }
+    g.globalAlpha = 1;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (confetti.parts.length) confetti.frame = requestAnimationFrame(stepConfetti);
     else {
       confetti.frame = null;
@@ -409,12 +605,237 @@
     return CPU_STEP_MS[(game || settings).cpuSpeed] || CPU_STEP_MS.normal;
   }
 
+  // ---------------------------------------------------------------- wardrobe (cosmetics)
+
+  // settings.cosmetics: { dice, pips, roll, colors, pattern, board, place, confetti,
+  // win, streak, cpu, avatar, keypad, title }. Only owned choices are kept.
+  function loadCosmetics() {
+    const chosen = { ...(settings.cosmetics || {}) };
+    if (settings.diceStyle === 'golden' && !chosen.dice) chosen.dice = 'golden'; // old Dice style setting
+    delete settings.diceStyle;
+    const clean = Cosmetics.sanitize(chosen, (id) => Progress.isUnlocked(progress, id));
+    clean.title = Cosmetics.title(chosen.title).earned(progress) ? Cosmetics.title(chosen.title).id : 'none';
+    settings.cosmetics = clean;
+  }
+  loadCosmetics();
+
+  const look = (categoryId) => Cosmetics.option(categoryId, settings.cosmetics[categoryId]) || Cosmetics.category(categoryId).options[0];
+
+  function chooseCosmetic(categoryId, optionId) {
+    settings.cosmetics[categoryId] = optionId;
+    // bought or worn while the Wardrobe is open: you've seen it, so it isn't "new"
+    if (!el.wardrobeDialog.hidden) markSeen('wardrobe', [`${categoryId}:${optionId}`]);
+    saveSettings();
+    applyCosmeticsToPage();
+    if (!el.wardrobeDialog.hidden) renderWardrobe();
+  }
+
+  // Keypads get a skin class; dice get theirs when drawn; the board is redrawn.
+  function applyCosmeticsToPage(redraw = true) {
+    for (const pad of document.querySelectorAll('.keypad')) {
+      pad.className = `keypad skin-${settings.cosmetics.keypad}`;
+    }
+    if (redraw) drawBoard();
+  }
+
+  // ---- Wardrobe dialog
+
+  function chipPreview(cat, opt) {
+    const box = make('span', 'chip-preview');
+    if (cat.id === 'dice') {
+      const die = make('span', `die mini skin-${opt.id}`);
+      renderDie(die, 5, 6, opt.id);
+      box.append(die);
+    } else if (cat.id === 'colors') {
+      for (const c of opt.colors) {
+        const sw = make('span', 'swatch');
+        sw.style.background = c;
+        box.append(sw);
+      }
+    } else if (cat.id === 'pattern' || cat.id === 'board') {
+      box.append(make('span', `tile-preview ${cat.id}-${opt.id}`));
+    } else if (cat.id === 'keypad') {
+      box.append(make('span', `key-preview skin-${opt.id}`, '7'));
+    } else if (cat.id === 'roll' || cat.id === 'place') {
+      box.append(make('span', `motion-preview ${cat.id}-${opt.id}`, cat.id === 'roll' ? '🎲' : '▦'));
+    } else if (cat.id === 'cpu') {
+      box.append(make('span', 'emoji-preview', opt.avatar));
+    } else {
+      box.append(make('span', 'emoji-preview', opt.preview || ''));
+    }
+    return box;
+  }
+
+  let wardrobeFilter = null; // Set of 'category:option' keys (new or unlockable when picked), or null for all
+  let wardrobeNew = []; // keys that were new when the Wardrobe opened
+
+  function wardrobeAvailable() {
+    const unlockable = Progress.SHOP.filter((i) => i.cosmetic && Progress.canBuy(progress, i.id).ok).map((i) => i.cosmetic.join(':'));
+    return new Set([...wardrobeNew, ...unlockable]);
+  }
+
+  function renderWardrobe() {
+    const body = el.wardrobeBody;
+    body.innerHTML = '';
+    renderWalletBar('wardrobe', !!wardrobeFilter);
+    const now = new Date();
+    const shows = (key) => !wardrobeFilter || wardrobeFilter.has(key);
+    if (wardrobeFilter && !wardrobeFilter.size) body.append(make('p', 'filter-note', 'Nothing new to wear yet. Keep playing to earn points!'));
+    for (const cat of Cosmetics.CATEGORIES) {
+      if (!cat.options.some((o) => shows(`${cat.id}:${o.id}`))) continue;
+      body.append(make('h3', 'stats-heading', cat.name));
+      const row = make('div', 'wardrobe-row');
+      for (const opt of cat.options) {
+        if (!shows(`${cat.id}:${opt.id}`)) continue;
+        const item = Cosmetics.itemFor(cat.id, opt.id);
+        const owned = Progress.isUnlocked(progress, item);
+        const chip = make('button', 'wardrobe-chip' + (settings.cosmetics[cat.id] === opt.id ? ' selected' : '') + (owned ? '' : ' locked'));
+        chip.type = 'button';
+        chip.dataset.cat = cat.id;
+        chip.dataset.opt = opt.id;
+        chip.append(chipPreview(cat, opt), make('span', 'chip-name', opt.name));
+        if (!owned) {
+          const check = Progress.canBuy(progress, item, now);
+          chip.dataset.unlock = item;
+          if (check.reason !== 'season') chip.dataset.cost = opt.price;
+          const tag = make('span', 'lock-badge');
+          if (check.reason === 'season') tag.append(icon('lock'), ` ${Progress.shopItem(item).seasonLabel}`);
+          else tag.append(icon('lock'), ` ${formatPoints(opt.price)}`);
+          chip.append(tag);
+        }
+        row.append(chip);
+      }
+      body.append(row);
+    }
+    // Titles are earned, not bought
+    if (!Cosmetics.TITLES.some((t) => shows(`title:${t.id}`))) return;
+    body.append(make('h3', 'stats-heading', 'Your title'));
+    const row = make('div', 'wardrobe-row');
+    for (const t of Cosmetics.TITLES) {
+      if (!shows(`title:${t.id}`)) continue;
+      const got = t.earned(progress);
+      const chip = make('button', 'wardrobe-chip title-chip' + (settings.cosmetics.title === t.id ? ' selected' : '') + (got ? '' : ' locked'));
+      chip.type = 'button';
+      chip.dataset.cat = 'title';
+      chip.dataset.opt = t.id;
+      chip.disabled = !got;
+      chip.append(make('span', 'chip-name', t.name));
+      if (!got) chip.append(make('span', 'chip-need', t.need));
+      row.append(chip);
+    }
+    body.append(row);
+  }
+
+  // onlyNew: from a results screen, show just the looks and titles you haven't seen yet
+  function openWardrobe(onlyNew = false) {
+    loadCosmetics();
+    const keys = wardrobeKeys();
+    wardrobeNew = keys.filter((k) => !seenList('wardrobe').includes(k));
+    wardrobeFilter = onlyNew === true ? wardrobeAvailable() : null;
+    renderWardrobe();
+    markSeen('wardrobe', keys);
+    el.wardrobeDialog.hidden = false;
+    el.wardrobeDialog.querySelector('.dialog').scrollTop = 0;
+    el.wardrobeDone.focus({ preventScroll: true });
+  }
+
+  el.wardrobeBtn.addEventListener('click', () => openWardrobe());
+  function closeWardrobe() {
+    el.wardrobeDialog.hidden = true;
+    refreshOpenNudges();
+    updateMenuBadges();
+  }
+  el.wardrobeDone.addEventListener('click', closeWardrobe);
+  el.wardrobeDialog.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeWardrobe();
+  });
+  el.wardrobeDialog.addEventListener('click', (e) => {
+    if (e.target === el.wardrobeDialog) return closeWardrobe();
+    const view = e.target.closest('#wardrobe-view [data-view]');
+    if (view) {
+      wardrobeFilter = view.dataset.view === 'available' ? wardrobeAvailable() : null;
+      renderWardrobe();
+      el.wardrobeDialog.querySelector('.dialog').scrollTop = 0;
+      return;
+    }
+    const chip = e.target.closest('.wardrobe-chip');
+    if (!chip || chip.disabled) return;
+    if (chip.dataset.unlock) return confirmUnlock(chip.dataset.unlock, chip);
+    chooseCosmetic(chip.dataset.cat, chip.dataset.opt);
+  });
+
+  // ---- Sticker album
+
+  let stickersFilter = null; // Set of sticker ids (new or with spares when opened), or null
+
+  function renderStickers() {
+    const body = el.stickersBody;
+    body.innerHTML = '';
+    const have = progress.stickers || {};
+    const got = Cosmetics.STICKERS.filter((st) => have[st.id]).length;
+    body.append(make('p', 'stats-summary', `${got} of ${Cosmetics.STICKERS.length} collected`));
+    if (stickersFilter) {
+      body.append(filterNote('Showing your new stickers and spares', () => {
+        stickersFilter = null;
+        renderStickers();
+      }));
+    }
+    for (const rarity of ['common', 'rare', 'epic']) {
+      const list = Cosmetics.STICKERS.filter((x) => x.rarity === rarity && (!stickersFilter || stickersFilter.has(x.id)));
+      if (!list.length) continue;
+      body.append(make('h3', 'stats-heading', { common: 'Common', rare: 'Rare', epic: 'Epic' }[rarity]));
+      const grid = make('div', 'sticker-grid');
+      for (const st of list) {
+        const n = have[st.id] || 0;
+        const slot = make('div', `sticker ${rarity}${n ? '' : ' missing'}`);
+        slot.append(make('span', 'sticker-emoji', n ? st.emoji : '?'));
+        if (n > 1) slot.append(make('span', 'sticker-count', `×${n}`));
+        slot.title = n ? `${st.id} (${rarity})` : 'Not found yet';
+        grid.append(slot);
+      }
+      body.append(grid);
+    }
+    const value = Cosmetics.duplicateValue(progress);
+    el.stickersTrade.disabled = value === 0;
+    el.stickersTrade.textContent = value ? `Swap spares for 🪙 ${formatPoints(value)}` : 'No spares to swap';
+  }
+
+  // onlyNew: from a results screen, show just the new stickers and the ones with spares
+  function openStickers(onlyNew = false) {
+    const have = progress.stickers || {};
+    stickersFilter =
+      onlyNew === true ? new Set(Object.keys(have).filter((id) => !seenList('stickers').includes(id) || have[id] > 1)) : null;
+    renderStickers();
+    markSeen('stickers', Object.keys(have));
+    el.stickersDialog.hidden = false;
+    el.stickersDone.focus();
+  }
+  function closeStickers() {
+    el.stickersDialog.hidden = true;
+    refreshOpenNudges();
+    updateMenuBadges();
+  }
+  el.stickersBtn.addEventListener('click', () => openStickers());
+  el.stickersDone.addEventListener('click', closeStickers);
+  el.stickersDialog.addEventListener('click', (e) => {
+    if (e.target === el.stickersDialog) closeStickers();
+  });
+  el.stickersDialog.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeStickers();
+  });
+  el.stickersTrade.addEventListener('click', () => {
+    const points = Cosmetics.tradeDuplicates(progress);
+    if (!points) return;
+    toast('🔁 Spares swapped', `+${formatPoints(points)} points`);
+    saveProgress();
+    renderStickers();
+  });
+
   // Shop item that unlocks a setting's choice; null when it's free (the default).
   function unlockFor(key, value) {
     if (key === 'theme' || String(value) === String(DEFAULT_SETTINGS[key])) return null;
     if (key === 'difficulty') return `difficulty.${value}`;
     if (key === 'cpuSteps') return 'cpuInstant';
-    if (key === 'diceStyle') return 'goldenDice';
     if (key === 'answerTime') return `answerTime${value}`; // each length is its own unlock
     return key;
   }
@@ -472,7 +893,7 @@
   function onSettingClick(e) {
     const btn = e.target.closest('.segmented[data-setting] button');
     if (!btn) return;
-    if (btn.dataset.unlock) return openShop(btn.dataset.unlock, btn);
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     const key = btn.parentElement.dataset.setting;
     const raw = btn.dataset.value;
     settings[key] = raw === 'true' ? true : raw === 'false' ? false : raw;
@@ -491,8 +912,7 @@
     const root = document.documentElement;
     if (settings.theme === 'light' || settings.theme === 'dark') root.dataset.theme = settings.theme;
     else delete root.dataset.theme;
-    if (settings.diceStyle === 'golden') root.dataset.dice = 'golden';
-    else delete root.dataset.dice;
+    applyCosmeticsToPage(false);
     if (redraw) drawBoard();
   }
   applyTheme(false); // the board doesn't exist yet during setup
@@ -535,7 +955,7 @@
 
   // ...and these wait for the start of the next turn, so a move is never changed halfway.
   function applySettingsForTurn() {
-    if (!game || game.invite) return;
+    if (!game || game.invite || game.fixed) return;
     applySettingsNow();
     game.placeMode = settings.placeMode;
     game.diceMode = settings.diceMode;
@@ -553,37 +973,70 @@
     container.querySelectorAll('button').forEach((b) => b.classList.toggle('selected', b === button));
   }
 
-  // Single player is free; Multiplayer, 3/4 players and Practice are shop unlocks.
-  const MODE_UNLOCK = { single: null, multi: 'multiplayer', practice: 'practice' };
+  // Single player and Classroom are free; Local multiplayer, 3/4 players and
+  // Practice are shop unlocks.
+  const MODE_UNLOCK = { single: null, multi: null, practice: 'practice' };
   const PLAYERS_UNLOCK = { 2: null, 3: 'players3', 4: 'players4' };
 
   function syncModeLocks() {
     el.modeCards.forEach((card) => setLockBadge(card, MODE_UNLOCK[card.dataset.mode]));
     for (const btn of el.playerCount.querySelectorAll('button')) setLockBadge(btn, PLAYERS_UNLOCK[btn.dataset.count]);
+    setLockBadge(el.multiKind.querySelector('[data-kind="local"]'), 'multiplayer');
   }
   syncModeLocks();
 
   el.modeCards.forEach((card) => {
     card.addEventListener('click', () => {
-      if (card.dataset.unlock) return openShop(card.dataset.unlock, card);
+      if (card.dataset.unlock) return confirmUnlock(card.dataset.unlock, card);
       setup.mode = card.dataset.mode;
+      // Local multiplayer is bought in the shop; until then Multiplayer opens on Classroom
+      if (setup.mode === 'multi' && !Progress.isUnlocked(progress, 'multiplayer')) selectMultiKind('classroom');
       el.modeCards.forEach((c) => {
         c.classList.toggle('selected', c === card);
         c.setAttribute('aria-checked', String(c === card));
       });
-      el.singleSetup.hidden = setup.mode !== 'single';
-      el.multiSetup.hidden = setup.mode !== 'multi';
-      el.practiceSetup.hidden = setup.mode !== 'practice';
-      el.boardSizeField.hidden = setup.mode === 'practice'; // practice has no board
-      el.startBtn.textContent = setup.mode === 'practice' ? 'Start practice' : 'Start game';
+      renderSetupSections();
       updatePracticePreview();
     });
+  });
+
+  // Which parts of the setup form show for the chosen mode (and, for
+  // multiplayer, Local or Classroom).
+  function renderSetupSections() {
+    const classroom = setup.mode === 'multi' && setup.multiKind === 'classroom';
+    el.singleSetup.hidden = setup.mode !== 'single';
+    el.multiSetup.hidden = setup.mode !== 'multi';
+    el.practiceSetup.hidden = setup.mode !== 'practice';
+    el.localSetup.hidden = setup.multiKind !== 'local';
+    el.classroomSetup.hidden = setup.multiKind !== 'classroom';
+    el.boardSizeField.hidden = setup.mode === 'practice' || classroom; // practice has no board
+    el.difficultyField.hidden = classroom; // the teacher picks these when hosting
+    el.startBtn.hidden = classroom; // Join / Host instead
+    el.startBtn.textContent = setup.mode === 'practice' ? 'Start practice' : 'Start game';
+    if (classroom) checkClassroom();
+  }
+
+  function selectMultiKind(kind) {
+    setup.multiKind = kind;
+    for (const b of el.multiKind.querySelectorAll('[data-kind]')) {
+      const on = b.dataset.kind === kind;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-checked', String(on));
+    }
+    renderSetupSections();
+  }
+
+  el.multiKind.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-kind]');
+    if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
+    selectMultiKind(btn.dataset.kind);
   });
 
   el.playerCount.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    if (btn.dataset.unlock) return openShop(btn.dataset.unlock, btn);
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     saveNameInputs();
     setup.count = Number(btn.dataset.count);
     selectIn(el.playerCount, btn);
@@ -601,7 +1054,7 @@
   el.boardSize.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    if (btn.dataset.unlock) return openShop(btn.dataset.unlock, btn);
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     selectIn(el.boardSize, btn);
     const custom = btn.dataset.size === 'custom';
     el.customSize.hidden = !custom;
@@ -654,11 +1107,13 @@
       row.className = 'name-row';
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
-      swatch.style.background = COLORS[i];
+      swatch.style.background = look('colors').colors[i];
       const input = document.createElement('input');
       input.type = 'text';
       input.maxLength = 14;
       input.value = isCpu ? cpuName(i) : setup.names[i];
+      input.placeholder = DEFAULT_NAMES[i];
+      input.addEventListener('input', () => input.classList.remove('missing'));
       input.disabled = isCpu;
       input.setAttribute('aria-label', `Player ${i + 1} name`);
       const kind = document.createElement('button');
@@ -684,6 +1139,7 @@
 
   el.setupForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (setup.mode === 'multi' && setup.multiKind === 'classroom') return; // not built yet
     if (setup.mode === 'practice') {
       startPractice(el.practiceName.value.trim() || 'You', practiceRoundSize, [...practiceTables], practiceLevel === 'expert');
       return;
@@ -697,10 +1153,17 @@
         { name: 'CPU', cpu: true },
       ];
     } else {
+      // every human player needs a real name
+      const inputs = [...el.nameInputs.querySelectorAll('input')];
+      const missing = inputs.filter((input, i) => setup.types[i] !== 'cpu' && !input.value.trim());
+      inputs.forEach((input) => input.classList.toggle('missing', missing.includes(input)));
+      el.namesError.hidden = !missing.length;
+      if (missing.length) {
+        missing[0].focus();
+        return;
+      }
       players = setup.names.slice(0, setup.count).map((name, i) =>
-        setup.types[i] === 'cpu'
-          ? { name: cpuName(i), cpu: true }
-          : { name: name.trim() || DEFAULT_NAMES[i], cpu: false }
+        setup.types[i] === 'cpu' ? { name: cpuName(i), cpu: true } : { name: name.trim(), cpu: false }
       );
     }
     startGame(players, setup.size, setup.mode);
@@ -711,8 +1174,23 @@
   let game = null;
   let gameId = 0; // bumped on every new game so pending timers from an old game do nothing
 
+  // Wardrobe on players: the CPU character's name and avatar; in single player,
+  // your avatar and title. "CPU 2" in multiplayer becomes e.g. "Owl 2".
+  function wardrobeLook(p, mode) {
+    if (p.cpu) {
+      const ch = look('cpu');
+      const name = p.name === 'CPU' ? ch.cpuName : p.name.replace(/^CPU\b/, ch.short);
+      return { name, avatar: ch.avatar, hello: ch.hello };
+    }
+    if (mode === 'multi') return {};
+    const avatar = look('avatar');
+    const t = Cosmetics.title(settings.cosmetics.title);
+    return { avatar: avatar.id === 'none' ? '' : avatar.preview, title: t.id === 'none' ? '' : t.name };
+  }
+
   // invite: a decoded invite, whose settings and dice seed apply to this game only.
-  function startGame(playerDefs, size, mode, invite = null) {
+  // extra: { cfg, classroom } for a class game: fixed settings, dice from the teacher.
+  function startGame(playerDefs, size, mode, invite = null, extra = null) {
     cancelContinue();
     stopTimer();
     stopPracticeTimer();
@@ -720,17 +1198,19 @@
     el.practiceScreen.hidden = true;
     el.practiceDone.hidden = true;
     gameId++;
-    const cfg = { ...settings, ...(invite ? invite.s : {}) };
+    const cfg = { ...settings, ...(invite ? invite.s : {}), ...(extra ? extra.cfg : {}) };
     const rng = invite && invite.r !== undefined ? seededRandom(invite.r) : Math.random;
     game = {
       invite,
+      fixed: Boolean(extra), // settings don't change mid-game
+      classroom: extra ? extra.classroom : null, // { session, game, round, reported, view }
       rng,
       cpuSpeed: cfg.cpuSpeed,
       cpuEnd: cfg.cpuEnd,
       showProgress: cfg.showProgress,
       id: gameId,
       size,
-      mode, // 'single' (you vs the CPU) or 'multi'
+      mode, // 'single' (you vs the CPU), 'multi' (one screen) or 'class' (dice from the teacher)
       board: Core.createBoard(size, { firstInCorner: cfg.firstInCorner }),
       difficulty: cfg.difficulty,
       sides: Core.DIFFICULTY_SIDES[cfg.difficulty] || 6,
@@ -739,7 +1219,8 @@
       fitMode: cfg.fitRolls,
       players: playerDefs.map((p, i) => ({
         ...p,
-        color: COLORS[i],
+        ...wardrobeLook(p, mode),
+        color: look('colors').colors[i],
         score: 0, // squares + bonus
         squares: 0,
         bonus: 0,
@@ -770,6 +1251,8 @@
     };
     game.diceBag = Core.createDice(size, rng, game.sides); // loaded to suit board and difficulty
     buildDicePicks(game.sides);
+    el.againBtn.hidden = mode === 'class'; // the teacher starts the next class game
+    el.toMenuBtn.textContent = mode === 'class' ? 'Leave class' : 'Main menu';
     el.startScreen.hidden = true;
     el.gameOver.hidden = true;
     el.gameScreen.hidden = false;
@@ -796,10 +1279,7 @@
     return game.rotated ? [b, a] : [a, b];
   }
 
-  function beginTurn() {
-    applySettingsForTurn();
-    const p = currentPlayer();
-    game.turns++;
+  function resetTurn() {
     stopTimer();
     game.dice = null;
     game.rotated = false;
@@ -813,6 +1293,19 @@
     el.steps.innerHTML = '';
     renderDie(el.dieA, null);
     renderDie(el.dieB, null);
+  }
+
+  function beginTurn() {
+    applySettingsForTurn();
+    const p = currentPlayer();
+    game.turns++;
+    resetTurn();
+    if (game.mode === 'class') {
+      game.phase = 'wait';
+      setMsg(game.classroom.round ? 'Waiting for the next roll…' : 'Get ready! Waiting for the first roll…');
+      render();
+      return;
+    }
     if (p.cpu) {
       game.phase = 'cpu';
       setMsg(`${p.name} is rolling…`);
@@ -837,19 +1330,21 @@
     }
   }
 
-  async function rollDice() {
+  // forced: the class game's roll, from the teacher
+  async function rollDice(forced = null) {
     game.phase = 'rolling';
     render();
-    el.dieA.classList.add('rolling');
-    el.dieB.classList.add('rolling');
+    const rollStyle = `roll-${settings.cosmetics.roll}`; // Wardrobe: wobble, tumble, bounce, sparkle
+    el.dieA.classList.add('rolling', rollStyle);
+    el.dieB.classList.add('rolling', rollStyle);
     for (let i = 0; i < 8; i++) {
       renderDie(el.dieA, Core.rollDie(Math.random, game.sides));
       renderDie(el.dieB, Core.rollDie(Math.random, game.sides));
       await waitInGame(55);
     }
-    el.dieA.classList.remove('rolling');
-    el.dieB.classList.remove('rolling');
-    game.dice = Core.rollForBoard(game.board, game.diceBag, game.rng, game.fitMode);
+    el.dieA.classList.remove('rolling', rollStyle);
+    el.dieB.classList.remove('rolling', rollStyle);
+    game.dice = forced ? [...forced] : Core.rollForBoard(game.board, game.diceBag, game.rng, game.fitMode);
     renderDie(el.dieA, game.dice[0]);
     renderDie(el.dieB, game.dice[1]);
     return game.dice;
@@ -951,8 +1446,9 @@
     p.log.push({ pass: true, a, b });
     p.stats.passes++;
     game.passes++;
-    const who = game.mode === 'single' && !p.cpu ? 'You pass' : `${p.name} passes`;
+    const who = game.mode !== 'multi' && !p.cpu ? 'You pass' : `${p.name} passes`;
     setMsg(`No room for a ${a} × ${b} anywhere. ${who}.`);
+    if (game.mode === 'class') reportClass({ kind: 'pass' });
     render();
     if (p.cpu) await finishComputerTurn(cpuStep());
     else await waitInGame(PASS_DELAY);
@@ -966,6 +1462,10 @@
     rect.a = a;
     rect.b = b;
     rect.solved = false;
+    // Wardrobe placing effect (the player who placed it chose it; CPUs use yours too)
+    rect.fx = settings.cosmetics.place !== 'none' ? settings.cosmetics.place : null;
+    rect.placedAt = performance.now();
+    if (rect.fx) animateBoard(PLACE_FX_MS + 50);
     game.lastRect = rect;
     game.passes = 0;
     return rect;
@@ -997,6 +1497,7 @@
     el.mathFeedback.textContent = '';
     el.mathFeedback.className = 'math-feedback';
     el.math.hidden = false;
+    showStreak(el.streakBadge, currentPlayer().streak);
     setKeypadEnabled(true);
     el.helpBtn.disabled = false;
     render();
@@ -1008,6 +1509,20 @@
     el.keypad.querySelectorAll('button').forEach((b) => (b.disabled = !on));
   }
 
+  // Can more typing still change the outcome? No once it matches, overshoots,
+  // or has as many digits as the answer.
+  // "🔥 5 in a row"; with the Wardrobe's growing flames it gets bigger at 5, 10 and 20.
+  function showStreak(node, n) {
+    node.textContent = n >= 2 ? `🔥 ${n} in a row` : '';
+    const level = n >= 20 ? 3 : n >= 10 ? 2 : n >= 5 ? 1 : 0;
+    node.classList.toggle('flames', settings.cosmetics.streak === 'flames' && level > 0);
+    node.dataset.level = level;
+  }
+
+  function answerDecided(entry, answer) {
+    return entry !== '' && (Number(entry) >= answer || entry.length >= String(answer).length);
+  }
+
   function typeKey(key) {
     const pend = game && game.phase === 'answer' && game.pending;
     if (!pend) return;
@@ -1017,10 +1532,10 @@
     else if (pend.entry.length < 3) pend.entry = (pend.entry === '0' ? '' : pend.entry) + key;
     el.answerBox.textContent = pend.entry;
     el.answerBox.className = 'answer-box';
-    // The right answer submits itself, and so does anything bigger than it (more
-    // digits can only make it bigger, so it's already wrong). Smaller wrong
-    // numbers wait for ✓, since you might not be done typing.
-    if (Number(pend.entry) >= pend.rect.area) checkAnswer();
+    // Submit by itself once the answer is decided: it's right, it's bigger than
+    // the answer, or it has as many digits as the answer. Shorter entries wait
+    // for ✓, since you might not be done typing.
+    if (answerDecided(pend.entry, pend.rect.area)) checkAnswer();
   }
 
   async function checkAnswer() {
@@ -1046,16 +1561,20 @@
       // Each bonus pops up on its own, like an achievement.
       for (const part of bonus.parts) toast(`${BONUS_TOASTS[part.label.split(' ')[0]]} ${capitalize(part.label)}`, `+${part.points} bonus points`);
       awardPoints(rect, firstTry, bonus.total);
-      Progress.recordAnswer(progress, p.name, {
-        a: rect.a,
-        b: rect.b,
-        firstTry,
-        correct: true,
-        wrongAnswers: pend.miss ? pend.miss.answers : [],
-        ms,
-      });
-      celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: p.streak, a: rect.a, b: rect.b, facts: playerFacts(p.name), size: unlockedTableSize() }));
-      saveProgress();
+      showStreak(el.streakBadge, p.streak);
+      if (game.mode === 'class') reportClass({ kind: 'placed', rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h }, firstTry, ms: Math.round(ms) });
+      if (countsForStats()) {
+        Progress.recordAnswer(progress, statsName(p), {
+          a: rect.a,
+          b: rect.b,
+          firstTry,
+          correct: true,
+          wrongAnswers: pend.miss ? pend.miss.answers : [],
+          ms,
+        });
+        celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: p.streak, a: rect.a, b: rect.b, facts: playerFacts(statsName(p)), size: unlockedTableSize() }));
+        saveProgress();
+      }
       game.pending = null;
       render();
       await waitInGame(1400);
@@ -1162,8 +1681,11 @@
     noteMiss(pend, { timeout: true });
     p.stats.timeouts++;
     p.streak = 0;
-    Progress.recordAnswer(progress, p.name, { a: rect.a, b: rect.b, firstTry: false, correct: false, wrongAnswers: pend.miss.answers, timeout: true });
-    saveProgress();
+    if (game.mode === 'class') reportClass({ kind: 'timeout' });
+    if (countsForStats()) {
+      Progress.recordAnswer(progress, statsName(p), { a: rect.a, b: rect.b, firstTry: false, correct: false, wrongAnswers: pend.miss.answers, timeout: true });
+      saveProgress();
+    }
     p.log.push({ timeout: true, a: rect.a, b: rect.b });
     el.answerBox.textContent = rect.area;
     el.answerBox.className = 'answer-box timeout';
@@ -1272,6 +1794,7 @@
   }
 
   function endTurn() {
+    if (game.mode === 'class') return beginTurn(); // the teacher's screen ends a class game
     if (game.passes >= game.players.length || Core.emptyCount(game.board) === 0) {
       finishGame();
       return;
@@ -1315,7 +1838,8 @@
     }
     setMsg('');
     el.steps.hidden = false;
-    addStep(`I rolled a <span class="num">${a}</span> and a <span class="num">${b}</span>.`);
+    const hello = currentPlayer().hello ? `${currentPlayer().hello} ` : ''; // CPU character's greeting
+    addStep(`${hello}I rolled a <span class="num">${a}</span> and a <span class="num">${b}</span>.`);
     await waitInGame(cpuStep());
     if (game.placeMode === 'draw') {
       const where = game.board.rects.length ? 'snug against the others' : 'in a corner';
@@ -1363,10 +1887,10 @@
     const top = ranked[0].score;
     const winners = ranked.filter((p) => p.score === top);
     const isSingle = game.mode === 'single';
-    recordGame(new Set(winners.map((p) => p.index)));
+    if (countsForStats()) recordGame(new Set(winners.map((p) => p.index)));
 
     if (winners.length > 1) el.resultTitle.textContent = "It's a tie!";
-    else if (isSingle) el.resultTitle.textContent = winners[0].cpu ? 'CPU wins!' : 'You win! 🎉';
+    else if (isSingle) el.resultTitle.textContent = winners[0].cpu ? `${winners[0].name} wins!` : 'You win! 🎉';
     else el.resultTitle.textContent = `${winners[0].name} wins!${winners[0].cpu ? '' : ' 🎉'}`;
 
     const empty = Core.emptyCount(game.board);
@@ -1379,7 +1903,8 @@
       li.style.setProperty('--c', p.color);
       const name = document.createElement('span');
       name.className = 'result-name';
-      name.textContent = p.name;
+      name.textContent = p.avatar ? `${p.avatar} ${p.name}` : p.name;
+      if (p.title) name.append(make('span', 'player-title', p.title));
       const pts = document.createElement('span');
       pts.className = 'result-pts';
       pts.textContent = `${p.score} pts`;
@@ -1393,7 +1918,8 @@
       el.resultList.append(li);
     }
     renderRewards(winners, empty);
-    showShopNudge(el.resultsShopBtn);
+    refreshNudges('results');
+    if (winners.length === 1 && !winners[0].cpu) celebrateWin();
     renderStats();
     setDetailsOpen(false);
     el.gameOver.hidden = false;
@@ -1409,6 +1935,13 @@
     if (!humans.length) return;
     const points = humans.reduce((sum, p) => sum + p.score, 0);
     Progress.addPoints(progress, points);
+    if (!countsForStats()) {
+      // local multiplayer: points only, nothing permanent
+      saveProgress();
+      el.rewards.append(make('div', 'reward-points', `🪙 +${formatPoints(points)} points · wallet: ${formatPoints(progress.wallet)}`));
+      el.rewards.append(make('p', 'setting-help', 'Multiplayer games are just for fun: they don’t count towards Stats or achievements.'));
+      return;
+    }
     progress.counters.games++;
     const humanWon = winners.length === 1 && !winners[0].cpu;
     const asked = (p) => p.answered + p.stats.timeouts;
@@ -1423,14 +1956,40 @@
       difficulty: game.difficulty,
       bestScore: Math.max(...humans.map((p) => p.score)),
     });
+    const stickers = grantStickers(earned);
     saveProgress();
+    appendRewards(points, earned, stickers);
+  }
 
-    el.rewards.append(make('div', 'reward-points', `🪙 +${points} points · wallet: ${progress.wallet}`));
+  // "+N points", new achievements and stickers on the end screen.
+  function appendRewards(points, earned, stickers) {
+    el.rewards.append(make('div', 'reward-points', `🪙 +${formatPoints(points)} points · wallet: ${formatPoints(progress.wallet)}`));
     for (const a of earned) {
       const row = make('div', 'reward-achievement');
       row.append(make('span', 'achievement-icon', a.icon), make('span', null, `New achievement: ${a.name}`), make('span', 'achievement-reward', `+${a.reward}`));
       el.rewards.append(row);
     }
+    if (stickers.length) {
+      const fresh = stickers.filter((x) => x.isNew).map((x) => x.sticker.emoji);
+      const spares = stickers.length - fresh.length;
+      const row = make('div', 'reward-achievement');
+      row.append(
+        make('span', 'achievement-icon', '🎁'),
+        make('span', null, `Stickers: ${fresh.join(' ')}${fresh.length && spares ? ' + ' : ''}${spares ? `${spares} spare${spares === 1 ? '' : 's'}` : ''}`)
+      );
+      el.rewards.append(row);
+    }
+  }
+
+  // Single-player and class games (and practice) count towards Stats and achievements.
+  function countsForStats() {
+    return game && (game.mode === 'single' || game.mode === 'class');
+  }
+
+  // Whose times tables an answer counts towards. In a class game you play under
+  // your first name, but it's still you on this device.
+  function statsName(p) {
+    return p.statsName || p.name;
   }
 
   // ---- end-of-game stats
@@ -1541,10 +2100,17 @@
     if (name) wrap.append(make('div', 'practice-name', name)); // no label for the default "You"
     const grid = make('div', 'fact-grid');
     grid.style.setProperty('--n', max + 1);
+    // Mastery badge: a gold ★ on a line's header once the whole line is mastered (both orders)
+    const head = (n) => {
+      const done = Progress.lineReached(facts, n, max, 'mastered');
+      const cell = make('span', 'fact-head' + (done ? ' line-mastered' : ''), done ? `★${n}` : String(n));
+      if (done) cell.title = `Every ${n} times fact is mastered!`;
+      return cell;
+    };
     grid.append(make('span', 'fact-head', '×'));
-    for (let c = 1; c <= max; c++) grid.append(make('span', 'fact-head', String(c)));
+    for (let c = 1; c <= max; c++) grid.append(head(c));
     for (let r = 1; r <= max; r++) {
-      grid.append(make('span', 'fact-head', String(r)));
+      grid.append(head(r));
       for (let c = 1; c <= max; c++) {
         const f = facts[Progress.factKey(r, c)];
         const status = Progress.factStatus(f);
@@ -1714,9 +2280,10 @@
       body.append(make('p', 'history-empty', 'No games or practice yet. Play one and your stats will show up here!'));
       return;
     }
-    const games = history.filter((g) => g.kind !== 'practice');
+    const games = history.filter((g) => !g.kind);
     const rounds = history.filter((g) => g.kind === 'practice');
-    if (history.length) renderGameHistory(body, games, rounds);
+    const classes = history.filter((g) => g.kind === 'class');
+    if (history.length) renderGameHistory(body, games, rounds, classes);
 
     // Lifetime times tables for everyone who has answered anything, in games or practice
     const names = new Map();
@@ -1737,7 +2304,7 @@
       body.append(renderPractice(label ? `${label}: facts to practice` : 'Facts to practice', 'var(--line)', toPractice, none));
     }
 
-    if (games.length) renderRecentGames(body, games);
+    if (games.length || classes.length) renderRecentGames(body, [...games, ...classes].sort((a, b) => a.at - b.at));
   }
 
   // Tiles and the per-player table (finished games only).
@@ -1764,8 +2331,9 @@
     return wrap;
   }
 
-  // Tiles, then one row per game type (mode · board · difficulty) and per practice type.
-  function renderGameHistory(body, games, rounds) {
+  // Tiles, then one row per game type (mode · board · difficulty), per practice
+  // type and per classroom game type.
+  function renderGameHistory(body, games, rounds, classes) {
     const vs = games
       .filter((g) => g.vsComputer && g.players.some((p) => !p.cpu))
       .map((g) => g.players.find((p) => !p.cpu).result);
@@ -1776,9 +2344,10 @@
       t.append(make('span', 'tile-value', value), make('span', 'tile-label', label));
       return t;
     };
+    const played = games.length + classes.length; // class games are games too
     tiles.append(
-      tile(`${games.length}${rounds.length ? ` + ${rounds.length}` : ''}`, rounds.length ? 'games + practice rounds' : 'games played'),
-      tile(formatDuration([...games, ...rounds].reduce((s, g) => s + g.duration, 0)), 'time played'),
+      tile(`${played}${rounds.length ? ` + ${rounds.length}` : ''}`, rounds.length ? 'games + practice rounds' : 'games played'),
+      tile(formatDuration([...games, ...rounds, ...classes].reduce((s, g) => s + g.duration, 0)), 'time played'),
       tile(vs.length ? `${count('win')}–${count('loss')}–${count('tie')}` : '—', 'vs CPU (W–L–T)')
     );
     body.append(tiles);
@@ -1834,6 +2403,30 @@
       body.append(make('h3', 'stats-heading', 'Practice'));
       body.append(statsTable(['', 'Rounds', 'Best round', 'Right 1st try', 'Avg answer'], rows));
     }
+
+    if (classes.length) {
+      const groups = new Map();
+      for (const g of classes) {
+        const key = `${g.size}|${g.difficulty}`;
+        const row = groups.get(key) || { size: g.size, difficulty: g.difficulty, games: 0, bestRank: null, best: 0, asked: 0, firstTry: 0, times: [] };
+        row.games++;
+        if (!row.bestRank || g.rank < row.bestRank.rank) row.bestRank = g;
+        row.best = Math.max(row.best, g.score);
+        row.asked += g.answered + g.timeouts;
+        row.firstTry += g.firstTry;
+        row.times.push(...g.times);
+        groups.set(key, row);
+      }
+      const rows = [...groups.values()]
+        .sort((a, b) => a.size - b.size || DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty])
+        .map((r) => ({
+          title: 'Classroom',
+          sub: `${r.size}×${r.size} · ${DIFFICULTY_NAMES[r.difficulty]}`,
+          values: [r.games, `${ordinal(r.bestRank.rank)} of ${r.bestRank.of}`, r.best, percent(r.firstTry, r.asked), avgTime(r.times)],
+        }));
+      body.append(make('h3', 'stats-heading', 'Classroom'));
+      body.append(statsTable(['', 'Games', 'Best place', 'Best score', 'Right 1st try', 'Avg answer'], rows));
+    }
   }
 
   function renderRecentGames(body, history) {
@@ -1842,6 +2435,13 @@
     for (const g of history.slice(-10).reverse()) {
       const li = make('li');
       const when = new Date(g.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      if (g.kind === 'class') {
+        li.append(make('span', 'meta', `${when} · Class ${g.code} · ${g.size}×${g.size}`));
+        li.append(document.createTextNode(`${g.name} ${g.score} · `));
+        li.append(make('span', 'winner', g.rank === 1 && g.of > 1 ? `🏆 1st of ${g.of}` : `${ordinal(g.rank)} of ${g.of}`));
+        recent.append(li);
+        continue;
+      }
       li.append(make('span', 'meta', `${when} · ${g.size}×${g.size}`));
       li.append(document.createTextNode(g.players.map((p) => `${p.name} ${p.score}`).join(' – ')));
       const won = g.players.filter((p) => p.result === 'win');
@@ -1905,15 +2505,71 @@
   // ---------------------------------------------------------------- shop
 
   const BUY_REASONS = {
+    season: (r) => `In the shop in ${r.when}`,
     points: (r) => `Need ${formatPoints(r.missing)} more`,
     requires: (r) => `Unlock ${Progress.shopItem(r.requires).name.split(':')[0]} first`,
   };
 
-  function renderShop(highlight) {
-    el.shopWallet.textContent = formatPoints(progress.wallet);
+  // Opened from a results screen, the Shop / Wardrobe / Stickers show only what
+  // their button promised; this line says so and can switch to everything.
+  function filterNote(text, showAll) {
+    const note = make('p', 'filter-note', `${text} · `);
+    const btn = make('button', 'link-btn', 'Show everything');
+    btn.type = 'button';
+    btn.addEventListener('click', showAll);
+    note.append(btn);
+    return note;
+  }
+
+  // Bottom bar of the Shop and Wardrobe: points you have, what an item would
+  // leave you with while it's hovered, the All / Available toggle and Done.
+  function renderWalletBar(prefix, onlyAvailable) {
+    $(`${prefix}-wallet`).textContent = formatPoints(progress.wallet);
+    previewCost(prefix, null);
+    for (const b of $(`${prefix}-view`).querySelectorAll('button')) {
+      const on = (b.dataset.view === 'available') === onlyAvailable;
+      b.classList.toggle('selected', on);
+      b.setAttribute('aria-pressed', on);
+    }
+  }
+
+  function previewCost(prefix, cost) {
+    const after = $(`${prefix}-wallet-after`);
+    after.replaceChildren();
+    after.className = 'wallet-after';
+    if (cost == null) return;
+    const left = progress.wallet - cost;
+    if (left >= 0) {
+      after.append(' ', make('span', 'wallet-cost', `− ${formatPoints(cost)}`), ' = ', make('strong', 'wallet-left', formatPoints(left)));
+    } else {
+      after.classList.add('short');
+      after.append(` · need ${formatPoints(-left)} more`);
+    }
+  }
+
+  for (const [prefix, selector] of [['shop', '[data-cost]'], ['wardrobe', '.wardrobe-chip[data-cost]']]) {
+    const dialog = $(prefix);
+    const show = (e) => {
+      const target = e.target.closest(selector);
+      previewCost(prefix, target ? Number(target.dataset.cost) : null);
+    };
+    dialog.addEventListener('pointerover', show);
+    dialog.addEventListener('focusin', show);
+    dialog.addEventListener('pointerleave', () => previewCost(prefix, null));
+  }
+
+  let shopFilter = null; // Set of item ids (affordable when picked), or null for everything
+  let shopHighlight = null;
+
+  function renderShop(highlight = shopHighlight) {
+    shopHighlight = highlight;
     el.shopBody.innerHTML = '';
+    renderWalletBar('shop', !!shopFilter);
+    if (shopFilter && !shopFilter.size) el.shopBody.append(make('p', 'filter-note', 'Nothing to unlock right now. Keep playing to earn points!'));
     let group = null;
     for (const item of Progress.SHOP) {
+      if (item.cosmetic) continue; // looks are unlocked in the Wardrobe
+      if (shopFilter && !shopFilter.has(item.id)) continue;
       if (item.group !== group) {
         group = item.group;
         el.shopBody.append(make('h3', 'stats-heading', group));
@@ -1931,6 +2587,7 @@
         const btn = make('button', 'btn btn-small' + (check.ok ? ' btn-primary' : ''), `🪙 ${formatPoints(item.price)}`);
         btn.type = 'button';
         btn.dataset.buy = item.id;
+        btn.dataset.cost = item.price;
         btn.disabled = !check.ok;
         row.append(btn);
         if (!check.ok) row.append(make('span', 'shop-why', BUY_REASONS[check.reason](check)));
@@ -1939,11 +2596,17 @@
     }
   }
 
+  function shopAvailable() {
+    return new Set(Progress.SHOP.filter((i) => !i.cosmetic && Progress.canBuy(progress, i.id).ok).map((i) => i.id));
+  }
+
   // What was tapped to open the shop, so buying it switches that exact choice on.
   let shopSource = null; // { item, el }
 
-  function openShop(highlight, sourceEl = null) {
+  // onlyAffordable: from a results screen, list just what can be bought right now
+  function openShop(highlight, sourceEl = null, onlyAffordable = false) {
     shopSource = highlight && sourceEl ? { item: highlight, el: sourceEl } : null;
+    shopFilter = onlyAffordable ? shopAvailable() : null;
     renderShop(highlight);
     el.shopDialog.hidden = false;
     const target = highlight && el.shopBody.querySelector('.shop-item.highlight');
@@ -1958,37 +2621,150 @@
 
   el.shopBtn.addEventListener('click', () => openShop());
   el.shopDone.addEventListener('click', closeShop);
-  el.resultsShopBtn.addEventListener('click', () => openShop());
-  el.pdShopBtn.addEventListener('click', () => openShop());
+  el.resultsShopBtn.addEventListener('click', () => openShop(null, null, true));
+  el.pdShopBtn.addEventListener('click', () => openShop(null, null, true));
+  for (const prefix of ['results', 'pd']) {
+    $(`${prefix}-wardrobe-btn`).addEventListener('click', () => openWardrobe(true));
+    $(`${prefix}-stickers-btn`).addEventListener('click', () => openStickers(true));
+  }
   el.shopDialog.addEventListener('click', (e) => {
     if (e.target === el.shopDialog) return closeShop();
+    const view = e.target.closest('#shop-view [data-view]');
+    if (view) {
+      shopFilter = view.dataset.view === 'available' ? shopAvailable() : null;
+      renderShop(null);
+      el.shopDialog.querySelector('.dialog').scrollTop = 0;
+      return;
+    }
     const btn = e.target.closest('[data-buy]');
-    if (!btn) return;
-    const item = Progress.shopItem(btn.dataset.buy);
-    if (!Progress.buy(progress, item.id).ok) return;
+    if (btn) purchase(Progress.shopItem(btn.dataset.buy));
+  });
+
+  // Buy an item and switch it on; used by the shop and the quick unlock.
+  function purchase(item) {
+    if (!Progress.buy(progress, item.id).ok) return false;
     toast(`🔓 Unlocked: ${item.name}`, `-${formatPoints(item.price)} points`);
     celebrate(Progress.awardAchievements(progress, { event: 'buy' }));
     saveProgress();
-    renderShop(item.id);
+    if (!el.shopDialog.hidden) renderShop(item.id);
     syncSettingsUI();
     syncBoardLocks();
     syncModeLocks();
     updatePracticePreview();
-    if (!el.gameOver.hidden) showShopNudge(el.resultsShopBtn);
-    if (!el.practiceDone.hidden) showShopNudge(el.pdShopBtn);
+    refreshOpenNudges();
     activatePurchase(item);
+    return true;
+  }
+
+  // ---- quick unlock: tapping a locked thing asks "Unlock X for 🪙 N?" (no whole shop)
+
+  let unlockAsk = null; // { item, el }
+
+  function confirmUnlock(itemId, sourceEl) {
+    let item = Progress.shopItem(itemId);
+    const check = Progress.canBuy(progress, itemId);
+    let offer = check.ok;
+    let message;
+    if (check.reason === 'requires') {
+      // offer the thing that has to come first
+      const first = Progress.shopItem(check.requires);
+      const firstCheck = Progress.canBuy(progress, first.id);
+      message = `${item.name} needs ${first.name} first.`;
+      item = first;
+      offer = firstCheck.ok;
+      if (!offer) message += firstCheck.reason === 'points' ? ` You need ${formatPoints(firstCheck.missing)} more points for it.` : '';
+      sourceEl = null; // what gets switched on is the prerequisite
+    } else if (check.reason === 'points') {
+      message = `You need ${formatPoints(check.missing)} more points. Keep playing to earn them!`;
+    } else if (check.reason === 'season') {
+      message = `This one is in the shop in ${check.when}.`;
+    }
+    unlockAsk = offer ? { item, el: sourceEl } : null;
+    el.unlockTitle.textContent = offer ? `Unlock ${item.name}?` : item.name;
+    el.unlockPrice.textContent = `🪙 ${formatPoints(item.price)} · you have ${formatPoints(progress.wallet)}`;
+    el.unlockMessage.textContent = message || '';
+    el.unlockMessage.hidden = !message;
+    el.unlockYes.hidden = !offer;
+    if (offer) el.unlockYes.textContent = `Unlock for 🪙 ${formatPoints(item.price)}`;
+    el.unlockNo.textContent = offer ? 'Cancel' : 'OK';
+    el.unlockDialog.hidden = false;
+    (offer ? el.unlockYes : el.unlockNo).focus();
+  }
+
+  function closeUnlock() {
+    el.unlockDialog.hidden = true;
+    unlockAsk = null;
+  }
+
+  el.unlockYes.addEventListener('click', () => {
+    const ask = unlockAsk;
+    closeUnlock();
+    if (!ask) return;
+    shopSource = ask.el ? { item: ask.item.id, el: ask.el } : null;
+    purchase(ask.item);
+  });
+  el.unlockNo.addEventListener('click', closeUnlock);
+  el.unlockDialog.addEventListener('click', (e) => {
+    if (e.target === el.unlockDialog) closeUnlock();
+  });
+  el.unlockDialog.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeUnlock();
   });
 
   // ---- "you can afford something" button on the results screens
 
+  // Shop items (not Wardrobe looks) you can afford right now
   function affordableCount() {
-    return Progress.SHOP.filter((item) => Progress.canBuy(progress, item.id).ok).length;
+    return Progress.SHOP.filter((item) => !item.cosmetic && Progress.canBuy(progress, item.id).ok).length;
   }
 
-  function showShopNudge(btn) {
+  // Things in the Wardrobe you own (or titles you've earned) but haven't looked at yet.
+  function wardrobeKeys() {
+    const keys = [];
+    for (const cat of Cosmetics.CATEGORIES) {
+      for (const opt of cat.options) {
+        if (opt.price && Progress.isUnlocked(progress, Cosmetics.itemFor(cat.id, opt.id))) keys.push(`${cat.id}:${opt.id}`);
+      }
+    }
+    for (const t of Cosmetics.TITLES) if (t.id !== 'none' && t.earned(progress)) keys.push(`title:${t.id}`);
+    return keys;
+  }
+
+  const seenList = (kind) => (progress.seen = progress.seen || {})[kind] || (progress.seen[kind] = []);
+  const newWardrobe = () => wardrobeKeys().filter((k) => !seenList('wardrobe').includes(k)).length;
+  // Wardrobe looks you could buy right now (the Wardrobe's share of the shop)
+  const affordableLooks = () => Progress.SHOP.filter((i) => i.cosmetic && Progress.canBuy(progress, i.id).ok).length;
+  const newStickers = () => Object.keys(progress.stickers || {}).filter((id) => !seenList('stickers').includes(id)).length;
+  const spareStickers = () => Object.values(progress.stickers || {}).reduce((n, c) => n + Math.max(0, c - 1), 0);
+
+  function markSeen(kind, keys) {
+    progress.seen[kind] = [...new Set([...seenList(kind), ...keys])];
+    saveProgress();
+  }
+
+  // Shop / Wardrobe / Stickers buttons on a results screen ('results' or 'pd'), only when there's something new.
+  function refreshNudges(prefix) {
+    const shop = $(`${prefix}-shop-btn`);
+    const wardrobe = $(`${prefix}-wardrobe-btn`);
+    const stickers = $(`${prefix}-stickers-btn`);
     const n = affordableCount();
-    btn.hidden = n === 0;
-    if (n) btn.replaceChildren(icon('shopping-cart'), ` Shop · ${n} new ${n === 1 ? 'unlock' : 'unlocks'}`);
+    shop.hidden = n === 0;
+    if (n) shop.replaceChildren(icon('shopping-cart'), ` Shop · ${n} new ${n === 1 ? 'unlock' : 'unlocks'}`);
+    const w = newWardrobe();
+    const looks = affordableLooks();
+    wardrobe.hidden = !w && !looks;
+    const wParts = [w && `${w} new`, looks && `${looks} to unlock`].filter(Boolean);
+    if (!wardrobe.hidden) wardrobe.replaceChildren(icon('shirt'), ` Wardrobe · ${wParts.join(' · ')}`);
+    const fresh = newStickers();
+    const spares = spareStickers();
+    stickers.hidden = !fresh && !spares;
+    const parts = [fresh && `${fresh} new`, spares && `${spares} ${spares === 1 ? 'spare' : 'spares'}`].filter(Boolean);
+    if (!stickers.hidden) stickers.replaceChildren(icon('sticker'), ` Stickers · ${parts.join(' · ')}`);
+  }
+
+  function refreshOpenNudges() {
+    if (!el.gameOver.hidden) refreshNudges('results');
+    if (!el.practiceDone.hidden) refreshNudges('pd');
   }
 
   // ---- switch a purchase on straight away
@@ -2004,9 +2780,9 @@
   // Bought straight from the shop list: switch on the obvious choice. Items with
   // more than one choice and no clear favourite (CPU speed, placing) are left alone.
   const ACTIVATE = {
-    multiplayer: () => tap('[data-mode="multi"]'),
-    players3: () => (tap('[data-mode="multi"]'), tap('#player-count [data-count="3"]')),
-    players4: () => (tap('[data-mode="multi"]'), tap('#player-count [data-count="4"]')),
+    multiplayer: () => (tap('[data-mode="multi"]'), tap('#multi-kind [data-kind="local"]')),
+    players3: () => (tap('[data-mode="multi"]'), tap('#multi-kind [data-kind="local"]'), tap('#player-count [data-count="3"]')),
+    players4: () => (tap('[data-mode="multi"]'), tap('#multi-kind [data-kind="local"]'), tap('#player-count [data-count="4"]')),
     practice: () => tap('[data-mode="practice"]'),
     practiceExpert: () => (tap('[data-mode="practice"]'), tap('#practice-level [data-level="expert"]')),
     board16: () => tap('#board-size [data-size="16"]'),
@@ -2027,13 +2803,13 @@
     timesMastered: setOption('timesMastered', 'time'),
     timesLearning: setOption('timesLearning', 'time'),
     timesPractice: setOption('timesPractice', 'time'),
-    goldenDice: setOption('diceStyle', 'golden'),
   };
 
   function activatePurchase(item) {
     const source = shopSource;
     shopSource = null;
-    if (source && source.item === item.id && source.el.isConnected) source.el.click(); // the exact thing tapped
+    if (item.cosmetic) chooseCosmetic(item.cosmetic[0], item.cosmetic[1]); // put it on
+    else if (source && source.item === item.id && source.el.isConnected) source.el.click(); // the exact thing tapped
     else if (ACTIVATE[item.id]) ACTIVATE[item.id]();
     applyTheme(false); // e.g. golden dice
   }
@@ -2151,7 +2927,7 @@
   el.practiceLevel.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    if (btn.dataset.unlock) return openShop(btn.dataset.unlock, btn);
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     practiceLevel = btn.dataset.level;
     renderPracticeLevel();
   });
@@ -2255,7 +3031,7 @@
       (practice.tables.length ? ` · ${practice.tables.sort((x, y) => x - y).map((n) => `×${n}`).join(' ')}` : '') +
       (practice.expert ? ' · 🧠 Expert' : '');
     el.prCounter.textContent = `Question ${practice.index + 1} of ${practice.queue.length}${focus}`;
-    el.prStreak.textContent = practice.streak >= 2 ? `🔥 ${practice.streak} in a row` : '';
+    showStreak(el.prStreak, practice.streak);
     el.prBar.style.width = `${(practice.index / practice.queue.length) * 100}%`;
     el.prQ.textContent = `${a} × ${b}`;
     el.prAnswer.textContent = '';
@@ -2297,7 +3073,7 @@
     else if (q.entry.length < 3) q.entry = (q.entry === '0' ? '' : q.entry) + key;
     el.prAnswer.textContent = q.entry;
     el.prAnswer.className = 'answer-box';
-    if (Number(q.entry) >= q.area) checkPractice(); // right answers (and too-big ones) submit themselves
+    if (answerDecided(q.entry, q.area)) checkPractice(); // right, too big, or all digits typed
   }
 
   function practiceLocked(on) {
@@ -2342,7 +3118,7 @@
       el.prAnswer.className = 'answer-box right';
       el.prFeedback.className = 'math-feedback good';
       el.prFeedback.textContent = firstTry ? `Correct! +${points} points 🎉` : `You got it! +${points} point${points === 1 ? '' : 's'}`;
-      el.prStreak.textContent = practice.streak >= 2 ? `🔥 ${practice.streak} in a row` : '';
+      showStreak(el.prStreak, practice.streak);
       await waitInGame(1100);
       practice.index++;
       nextPracticeQuestion();
@@ -2352,7 +3128,7 @@
     q.wrong.push(Number(q.entry));
     q.entry = '';
     practice.streak = 0;
-    el.prStreak.textContent = '';
+    showStreak(el.prStreak, 0);
     requeue(q);
     el.prAnswer.className = 'answer-box';
     void el.prAnswer.offsetWidth; // restart the shake
@@ -2487,7 +3263,7 @@
     el.pdBody.append(renderFactGrid('', facts));
 
     setPracticeDetailsOpen(false);
-    showShopNudge(el.pdShopBtn);
+    refreshNudges('pd');
     el.practiceDone.hidden = false;
     el.practiceDone.querySelector('.dialog').scrollTop = 0;
     el.pdAgain.focus();
@@ -2606,6 +3382,10 @@
   let madeInvite = null;
 
   el.inviteCreate.addEventListener('click', () => {
+    if (setup.mode === 'multi' && invitePlayersFromSetup().some((p) => !p.c && !p.n)) {
+      toast('✏️ Players need names', 'Type every player’s name on the main menu first.');
+      return;
+    }
     madeInvite = buildInvite();
     if (!madeInvite) return;
     const token = Invite.encode(madeInvite);
@@ -2777,6 +3557,545 @@
     }
   }
   window.addEventListener('hashchange', checkUrlForInvite);
+
+
+  // ---------------------------------------------------------------- classroom
+  // Everyone plays the same rolls on their own board; the teacher's screen
+  // (server/classroom.js) rolls, shows the leaderboard and ends the game.
+
+  const Classroom = window.BlockoutClassroom;
+  const DIFFICULTY_SIDES_TEXT = { easy: '6-sided dice', medium: '8-sided dice', hard: '12-sided dice' };
+
+  function ordinal(n) {
+    const tens = n % 100;
+    const suffix = tens >= 11 && tens <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th';
+    return `${n}${suffix}`;
+  }
+
+  // Can this page reach the classroom server? Shown in the Classroom menu.
+  async function checkClassroom() {
+    const reason = await Classroom.check();
+    el.classOffline.hidden = !reason;
+    el.classJoinOpen.disabled = el.classHostOpen.disabled = Boolean(reason);
+    if (reason) {
+      el.classOffline.innerHTML =
+        reason === 'file'
+          ? 'Classroom games run through the Blockout server. On the teacher’s computer run <code>node server/classroom.js</code>, then open the address it shows (like <code>http://localhost:8080</code>).'
+          : 'Can’t reach the classroom server. Run <code>node server/classroom.js</code> and open this page from the address it prints (like <code>http://localhost:8080</code>), not from another web server.';
+    }
+    return !reason;
+  }
+
+  // ---- students
+
+  let classSession = null; // { code, id, key, name }
+  let classStop = null; // closes the live updates
+  let classSeen = false; // got at least one update since connecting
+
+  function openClassJoin(code = '') {
+    const saved = Classroom.session();
+    el.classCodeInput.value = code || '';
+    el.classNameInput.value = (saved && saved.name) || '';
+    el.classJoinError.hidden = true;
+    el.classJoinForm.hidden = false;
+    el.classWait.hidden = true;
+    el.classJoin.hidden = false;
+    (code ? el.classNameInput : el.classCodeInput).focus();
+  }
+
+  el.classJoinOpen.addEventListener('click', () => openClassJoin());
+  el.classJoinCancel.addEventListener('click', () => (el.classJoin.hidden = true));
+  el.classCodeInput.addEventListener('input', () => {
+    el.classCodeInput.value = el.classCodeInput.value.toUpperCase().replace(/[^A-Z]/g, '');
+  });
+
+  el.classJoinForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = el.classCodeInput.value.trim().toUpperCase();
+    const name = el.classNameInput.value.trim();
+    const fail = (msg, input) => {
+      el.classJoinError.textContent = msg;
+      el.classJoinError.hidden = false;
+      if (input) input.focus();
+    };
+    if (code.length !== 4) return fail('The class code has 4 letters.', el.classCodeInput);
+    if (!name) return fail('Type your first name.', el.classNameInput);
+    el.classJoinBtn.disabled = true;
+    try {
+      const joined = await Classroom.join(code, name);
+      connectClass({ code, id: joined.id, key: joined.key, name: joined.name });
+      showClassWaiting(null);
+    } catch (err) {
+      fail(err.message, err.code === 'room' ? el.classCodeInput : el.classNameInput);
+    } finally {
+      el.classJoinBtn.disabled = false;
+    }
+  });
+
+  function connectClass(session) {
+    if (classStop) classStop();
+    classSession = session;
+    classSeen = false;
+    Classroom.saveSession(session);
+    classStop = Classroom.listenStudent(session, {
+      view: (v) => {
+        classSeen = true;
+        onClassView(v);
+      },
+      gone: onClassGone,
+    });
+  }
+
+  function leaveClass() {
+    if (!classSession) return;
+    Classroom.leave(classSession).catch(() => {});
+    if (classStop) classStop();
+    classStop = null;
+    classSession = null;
+    Classroom.saveSession(null);
+  }
+
+  el.classLeaveBtn.addEventListener('click', () => {
+    leaveClass();
+    el.classJoin.hidden = true;
+  });
+
+  function onClassGone(reason) {
+    const wasIn = classSeen;
+    classStop = null;
+    classSession = null;
+    Classroom.saveSession(null);
+    el.classJoin.hidden = true;
+    if (game && game.mode === 'class' && game.phase !== 'over') toMenu();
+    if (!wasIn) return; // an old class from last time: just forget it
+    if (reason === 'closed') toast('👋 Your teacher closed the class', 'Thanks for playing!');
+    else if (reason === 'removed') toast('You’ve left the class', 'Join again with the code if that was a mistake.');
+    else toast('⚠️ Lost the class', 'Join again with the code on the board.');
+  }
+
+  function showClassWaiting(view) {
+    el.classWaitName.textContent = classSession.name;
+    el.classWaitText.textContent =
+      view && view.state === 'ended' ? 'That game just finished. Wait here for the next one!' : 'Waiting for your teacher to start the game…';
+    el.classJoinForm.hidden = true;
+    el.classWait.hidden = false;
+    el.classJoin.hidden = false;
+  }
+
+  function onClassView(view) {
+    const mine = game && game.mode === 'class' && game.classroom.game === view.game;
+    if (view.state === 'playing') {
+      if (!mine) startClassGame(view);
+      else syncClassGame(view);
+      return;
+    }
+    if (view.state === 'ended' && mine) {
+      if (game.phase !== 'over') finishClassGame(view);
+      return;
+    }
+    // Lobby (or a game that finished before we got here): wait for the next one.
+    // Results stay on screen until the next game starts.
+    if (game && game.mode === 'class' && game.phase === 'over') return;
+    if (game && game.mode === 'class') toMenu();
+    showClassWaiting(view);
+  }
+
+  function startClassGame(view) {
+    el.classJoin.hidden = true;
+    for (const d of document.querySelectorAll('.overlay')) if (d !== el.gameOver) d.hidden = true;
+    const you = view.you;
+    const { size, difficulty } = view.settings;
+    startGame([{ name: you.name, statsName: el.singleName.value.trim() || 'You', cpu: false }], size, 'class', null, {
+      // everyone plays by the same rules; how you place rectangles is up to you
+      cfg: { difficulty, answerTime: 0, firstInCorner: false, diceMode: 'virtual', autoRoll: 'off', fitRolls: 'never' },
+      classroom: { session: classSession, game: view.game, round: 0, reported: true, view },
+    });
+    // Rejoining mid-game: put your rectangles back and pick up your score.
+    const p = game.players[0];
+    for (const r of you.rects) {
+      const rect = Core.place(game.board, r.x, r.y, r.w, r.h, 0);
+      Object.assign(rect, { a: r.a, b: r.b, solved: true });
+    }
+    Object.assign(p, { squares: you.squares, bonus: you.bonus, score: you.score, streak: you.streak, answered: you.answered, firstTry: you.firstTry });
+    if (you.rects.length) toast(`🏫 Back in class ${view.code}`, `You have ${you.score} points.`);
+    syncClassGame(view);
+  }
+
+  // A new roll from the teacher. If you were still working on the last one, it's gone.
+  function syncClassGame(view) {
+    const c = game.classroom;
+    c.view = view;
+    if (view.round > c.round) {
+      if (!['wait', 'over'].includes(game.phase)) {
+        gameId++; // stop whatever the last roll was still doing
+        if (!c.reported) {
+          if (game.pending) Core.removeRect(game.board, game.pending.rect);
+          const [a, b] = game.dice || [];
+          if (a) currentPlayer().log.push({ timeout: true, a, b });
+          currentPlayer().streak = 0;
+          toast('⏭️ Next roll!', 'Your teacher moved on before you finished that one.');
+        }
+      }
+      resetTurn();
+      c.round = view.round;
+      const [a, b] = view.roll;
+      if (view.you.done) {
+        // No room for this roll (the server checks), or you'd already answered it
+        c.reported = true;
+        game.dice = [a, b];
+        renderDie(el.dieA, a);
+        renderDie(el.dieB, b);
+        game.phase = 'wait';
+        if (view.you.result === 'pass') {
+          currentPlayer().log.push({ pass: true, a, b });
+          setMsg(`No room for a ${a} × ${b} anywhere. You pass this time.`);
+        } else setMsg('Waiting for the next roll…');
+      } else {
+        c.reported = false;
+        classTurn(a, b);
+      }
+    }
+    render();
+  }
+
+  async function classTurn(a, b) {
+    setMsg('');
+    await rollDice([a, b]);
+    await startPlacing(a, b);
+  }
+
+  // Tell the server how this roll went (once per roll).
+  function reportClass(result) {
+    const c = game.classroom;
+    if (!c || c.reported) return;
+    c.reported = true;
+    Classroom.sendResult(c.session, { round: c.round, ...result }).catch((err) => {
+      if (err.code !== 'stale' && err.code !== 'done') toast('⚠️ Couldn’t send your answer', err.message);
+    });
+  }
+
+  function finishClassGame(view) {
+    gameId++;
+    stopTimer();
+    const you = view.you;
+    const p = game.players[0];
+    game.classroom.view = view;
+    game.phase = 'over';
+    game.dice = null;
+    game.pending = null;
+    el.math.hidden = true;
+    setMsg('');
+    Object.assign(p, { score: you.score, squares: you.squares, bonus: you.bonus });
+    render();
+    const alone = view.of < 2;
+    el.resultTitle.textContent = alone
+      ? 'Game over!'
+      : you.rank === 1
+        ? `${you.tied ? 'Tied for top' : 'Top'} of the class! 🏆`
+        : `You ${you.tied ? 'tied for' : 'came'} ${ordinal(you.rank)} of ${view.of}!`;
+    const asked = you.answered + you.timeouts;
+    el.resultSub.textContent = `${you.score} points · ${you.firstTry} of ${asked} right first time`;
+    el.resultList.innerHTML = '';
+    const rows = [...view.top];
+    if (!rows.some((r) => r.name === you.name)) rows.push({ gap: true }, { name: you.name, rank: you.rank, score: you.score });
+    const top = Math.max(1, ...rows.filter((r) => !r.gap).map((r) => r.score));
+    for (const r of rows) {
+      const li = make('li', r.gap ? 'result-gap' : r.name === you.name ? 'result-you' : '');
+      if (r.gap) {
+        li.textContent = '⋯';
+        el.resultList.append(li);
+        continue;
+      }
+      li.style.setProperty('--c', r.name === you.name ? p.color : 'var(--muted)');
+      const bar = make('span', 'result-bar');
+      const fill = make('span');
+      fill.style.width = `${(r.score / top) * 100}%`;
+      bar.append(fill);
+      li.append(make('span', 'result-name', `${ordinal(r.rank)} ${r.name}`), make('span', 'result-pts', `${r.score} pts`), bar);
+      el.resultList.append(li);
+    }
+    renderClassRewards(view);
+    refreshNudges('results');
+    if (you.rank === 1 && !alone) celebrateWin();
+    renderStats();
+    setDetailsOpen(false);
+    el.gameOver.hidden = false;
+    el.gameOver.querySelector('.dialog').scrollTop = 0;
+  }
+
+  function renderClassRewards(view) {
+    const you = view.you;
+    const p = game.players[0];
+    el.rewards.innerHTML = '';
+    Progress.addPoints(progress, you.score);
+    progress.counters.classGames = (progress.counters.classGames || 0) + 1;
+    const asked = you.answered + you.timeouts;
+    const earned = Progress.awardAchievements(progress, {
+      event: 'class',
+      classGames: progress.counters.classGames,
+      rank: you.rank,
+      of: view.of,
+      perfect: asked >= 5 && you.firstTry === asked,
+      missed: you.missed,
+      rolls: view.round,
+    });
+    const stickers = grantStickers(earned);
+    saveProgress();
+    recordClassGame(view, p);
+    appendRewards(you.score, earned, stickers);
+    el.rewards.append(make('p', 'setting-help', 'Stay on this screen: your teacher can start another game.'));
+  }
+
+  function recordClassGame(view, p) {
+    const you = view.you;
+    const history = loadHistory();
+    history.push({
+      kind: 'class',
+      at: Date.now(),
+      duration: Date.now() - game.startedAt,
+      code: view.code,
+      size: view.settings.size,
+      difficulty: view.settings.difficulty,
+      name: you.name,
+      statsName: statsName(p),
+      rank: you.rank,
+      of: view.of,
+      score: you.score,
+      answered: you.answered,
+      firstTry: you.firstTry,
+      timeouts: you.timeouts,
+      times: p.stats.times.map(Math.round),
+      missed: p.stats.missed,
+    });
+    saveHistory(history);
+  }
+
+  // ---- teacher
+
+  let host = null; // { code, teacherKey, lan }
+  let hostStop = null;
+  let hostView = null;
+  let hostSetupMode = 'create'; // or 'change' (settings of a class that's waiting)
+
+  function segValue(group) {
+    return group.querySelector('.selected').dataset.value;
+  }
+  function setSeg(group, value) {
+    for (const b of group.querySelectorAll('button')) b.classList.toggle('selected', b.dataset.value === String(value));
+  }
+  for (const group of [el.hostSize, el.hostDifficulty, el.hostRounds]) {
+    group.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b) setSeg(group, b.dataset.value);
+    });
+  }
+
+  function openHostSetup(mode) {
+    hostSetupMode = mode;
+    const s = mode === 'change' && hostView ? hostView.settings : null;
+    if (s) {
+      setSeg(el.hostSize, s.size);
+      setSeg(el.hostDifficulty, s.difficulty);
+      setSeg(el.hostRounds, s.rounds);
+    }
+    el.hostSetupTitle.textContent = mode === 'change' ? 'Game settings' : 'Host a class';
+    el.hostCreate.textContent = mode === 'change' ? 'Save' : 'Create class';
+    el.hostError.hidden = true;
+    el.hostSetup.hidden = false;
+    el.hostCreate.focus();
+  }
+
+  el.classHostOpen.addEventListener('click', () => openHostSetup('create'));
+  el.hostChange.addEventListener('click', () => openHostSetup('change'));
+  el.hostCancel.addEventListener('click', () => (el.hostSetup.hidden = true));
+  el.hostCreate.addEventListener('click', async () => {
+    const chosen = { size: Number(segValue(el.hostSize)), difficulty: segValue(el.hostDifficulty), rounds: Number(segValue(el.hostRounds)) };
+    el.hostCreate.disabled = true;
+    try {
+      if (hostSetupMode === 'change') await Classroom.teacher(host, 'settings', { settings: chosen });
+      else {
+        const room = await Classroom.createRoom(chosen);
+        connectHost({ code: room.code, teacherKey: room.teacherKey, lan: room.lan });
+      }
+      el.hostSetup.hidden = true;
+    } catch (err) {
+      el.hostError.textContent = err.message;
+      el.hostError.hidden = false;
+    } finally {
+      el.hostCreate.disabled = false;
+    }
+  });
+
+  function connectHost(h) {
+    if (hostStop) hostStop();
+    host = h;
+    hostView = null;
+    Classroom.saveHost(h);
+    el.startScreen.hidden = true;
+    el.gameScreen.hidden = true;
+    el.hostScreen.hidden = false;
+    el.hostCodeSmall.textContent = h.code;
+    hostStop = Classroom.listenTeacher(h, { view: renderHost, gone: hostGone });
+  }
+
+  function hostGone(reason) {
+    const had = Boolean(hostView);
+    hostStop = null;
+    host = null;
+    hostView = null;
+    Classroom.saveHost(null);
+    el.hostScreen.hidden = true;
+    el.startScreen.hidden = false;
+    if (had && reason !== 'closed') toast('⚠️ Lost the class', 'The classroom server may have restarted.');
+  }
+
+  async function hostAction(action, extra) {
+    try {
+      await Classroom.teacher(host, action, extra);
+    } catch (err) {
+      toast('⚠️ ' + err.message);
+    }
+  }
+
+  // The address to show on the board. localhost only works on this computer,
+  // so use the network address the server found instead.
+  function joinUrl(code) {
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    const base = local && host.lan && host.lan.length ? host.lan[0] : `${location.origin}${location.pathname}`;
+    return { base, full: `${base}#class=${code}`, local: local && !(host.lan && host.lan.length) };
+  }
+
+  function renderHost(view) {
+    const first = !hostView;
+    hostView = view;
+    const s = view.settings;
+    el.hostLobby.hidden = view.state !== 'lobby';
+    el.hostPlay.hidden = view.state !== 'playing';
+    el.hostEnded.hidden = view.state !== 'ended';
+
+    if (view.state === 'lobby') {
+      const url = joinUrl(view.code);
+      el.hostCode.textContent = view.code;
+      el.hostUrl.textContent = url.base.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      el.hostLocalHelp.hidden = !url.local;
+      if (first || el.hostQr.dataset.url !== url.full) {
+        drawQr(el.hostQr, url.full);
+        el.hostQr.dataset.url = url.full;
+      }
+      el.hostSettings.textContent = `${s.size}×${s.size} board · ${DIFFICULTY_NAMES[s.difficulty]} (${DIFFICULTY_SIDES_TEXT[s.difficulty]}) · ${s.rounds} rolls`;
+      el.hostStartBtn.disabled = !view.players.length;
+      el.hostStartBtn.textContent = view.players.length ? `Start game (${view.players.length} ${view.players.length === 1 ? 'player' : 'players'})` : 'Waiting for players to join…';
+    } else if (view.state === 'playing') {
+      const [a, b] = view.roll;
+      const sides = Core.DIFFICULTY_SIDES[s.difficulty];
+      el.hostRound.textContent = `Roll ${view.round} of ${s.rounds}`;
+      renderDie(el.hostDieA, a, sides);
+      renderDie(el.hostDieB, b, sides);
+      el.hostRollText.textContent = `Draw a ${a} by ${b} rectangle`;
+      el.hostDoneFill.style.width = `${view.here ? (view.done / view.here) * 100 : 0}%`;
+      el.hostDoneText.textContent = `${view.done} of ${view.here} done`;
+      el.hostNextBtn.replaceChildren(icon(view.round >= s.rounds ? 'flag' : 'dices'), view.round >= s.rounds ? ' Finish game' : ' Next roll');
+      el.hostAuto.checked = view.autoNext;
+    } else {
+      renderHostResults(view);
+    }
+    renderHostRoster(view);
+  }
+
+  function renderHostRoster(view) {
+    const n = view.players.length;
+    el.hostRosterTitle.textContent = view.state === 'lobby' ? `${n} joined` : view.state === 'playing' ? 'Leaderboard' : 'Final scores';
+    el.hostRoster.innerHTML = '';
+    el.hostRoster.classList.toggle('ranked', view.state !== 'lobby');
+    if (!n) el.hostRoster.append(make('li', 'host-empty', 'Nobody yet. Names show up here as students join.'));
+    for (const p of view.players) {
+      const li = make('li', p.connected ? '' : 'offline');
+      if (view.state !== 'lobby') li.append(make('span', 'host-rank', ordinal(p.rank)));
+      li.append(make('span', 'host-name', p.name));
+      if (view.state === 'lobby') {
+        const remove = make('button', 'host-remove', '×');
+        remove.type = 'button';
+        remove.title = `Remove ${p.name}`;
+        remove.setAttribute('aria-label', `Remove ${p.name}`);
+        remove.addEventListener('click', () => confirm(`Remove ${p.name} from the class?`) && hostAction('remove', { id: p.id }));
+        li.append(remove);
+      } else {
+        li.append(make('span', 'host-score', `${p.score}`));
+        const status = !p.connected ? '📴' : view.state === 'playing' ? (p.done ? '✓' : '…') : '';
+        li.append(make('span', 'host-status', status));
+        li.title = !p.connected ? 'Not connected' : p.done ? 'Done with this roll' : 'Still working';
+      }
+      el.hostRoster.append(li);
+    }
+  }
+
+  function renderHostResults(view) {
+    el.hostPodium.innerHTML = '';
+    const medals = ['🥇', '🥈', '🥉'];
+    for (const p of view.players.filter((x) => x.rank <= 3).slice(0, 5)) {
+      const li = make('li', `podium-${p.rank}`);
+      li.append(make('span', 'podium-medal', medals[p.rank - 1]), make('span', 'podium-name', p.name), make('span', 'podium-score', `${p.score} pts`));
+      el.hostPodium.append(li);
+    }
+    const r = view.report;
+    el.hostReport.innerHTML = '';
+    const tile = (value, label) => {
+      const t = make('div', 'tile');
+      t.append(make('span', 'tile-value', value), make('span', 'tile-label', label));
+      return t;
+    };
+    el.hostReport.append(
+      tile(r.asked ? `${Math.round((r.firstTry / r.asked) * 100)}%` : '—', 'right first time'),
+      tile(r.avgMs ? `${(r.avgMs / 1000).toFixed(1)} s` : '—', 'average answer'),
+      tile(String(r.asked), 'facts answered')
+    );
+    el.hostHardest.innerHTML = '';
+    if (!r.hardest.length) el.hostHardest.append(make('li', 'host-empty', 'Nothing missed. What a class! 🌟'));
+    for (const f of r.hardest) {
+      const li = make('li');
+      li.append(make('span', 'host-fact', f.fact), make('span', 'host-missed', `missed ${f.missed} of ${f.asked}`));
+      el.hostHardest.append(li);
+    }
+  }
+
+  el.hostStartBtn.addEventListener('click', () => hostAction('start'));
+  el.hostNextBtn.addEventListener('click', () => hostAction('next'));
+  el.hostEndBtn.addEventListener('click', () => confirm('End the game now? Scores so far are final.') && hostAction('end'));
+  el.hostAuto.addEventListener('change', () => hostAction('autoNext', { on: el.hostAuto.checked }));
+  el.hostAgainBtn.addEventListener('click', () => hostAction('lobby'));
+  async function closeClass() {
+    if (!confirm('Close the class? Everyone goes back to their menu.')) return;
+    const h = host;
+    if (hostStop) hostStop();
+    await Classroom.teacher(h, 'close').catch(() => {});
+    hostGone('closed');
+  }
+  el.hostCloseBtn.addEventListener('click', closeClass);
+  el.hostClose2Btn.addEventListener('click', closeClass);
+  // Space rolls again on the teacher's screen
+  document.addEventListener('keydown', (e) => {
+    if (el.hostScreen.hidden || !hostView || e.target.closest('input, button, .overlay')) return;
+    if ((e.key === ' ' || e.key === 'Enter') && hostView.state === 'playing') {
+      e.preventDefault();
+      hostAction('next');
+    }
+  });
+
+  // ---- after a reload: pick up where this browser left off
+
+  if (Classroom.served()) {
+    const savedHost = Classroom.host();
+    const savedSession = Classroom.session();
+    const linkCode = Classroom.codeFromHash();
+    if (linkCode) {
+      history.replaceState(null, '', location.pathname + location.search);
+      tap('[data-mode="multi"]');
+      tap('#multi-kind [data-kind="classroom"]');
+      if (savedSession && savedSession.code === linkCode) connectClass(savedSession);
+      else openClassJoin(linkCode);
+    } else if (savedHost) connectHost(savedHost);
+    else if (savedSession) connectClass(savedSession);
+  }
 
   // ---------------------------------------------------------------- daily check-in
 
@@ -3008,10 +4327,16 @@
   });
 
   el.menuBtn.addEventListener('click', () => {
-    if (game && game.phase !== 'over' && !confirm('Leave this game and go back to the menu?')) return;
+    const inClass = game && game.mode === 'class';
+    const question = inClass ? 'Leave the class game? Your score so far won’t count.' : 'Leave this game and go back to the menu?';
+    if (game && game.phase !== 'over' && !confirm(question)) return;
+    if (inClass) leaveClass();
     toMenu();
   });
-  el.toMenuBtn.addEventListener('click', toMenu);
+  el.toMenuBtn.addEventListener('click', () => {
+    if (game && game.mode === 'class') leaveClass();
+    toMenu();
+  });
   el.againBtn.addEventListener('click', () => {
     startGame(
       game.players.map(({ name, cpu }) => ({ name, cpu })),
@@ -3039,8 +4364,12 @@
   }
 
   // Pips for a normal d6; 8- and 12-sided dice show the number.
-  function renderDie(die, value, sides = game ? game.sides : 6) {
+  // Pips for a normal d6 (dots, or the Wardrobe's hearts/stars/…); 8- and
+  // 12-sided dice show the number. `skin` defaults to the Wardrobe's dice.
+  function renderDie(die, value, sides = game ? game.sides : 6, skin = settings.cosmetics.dice) {
     die.innerHTML = '';
+    for (const c of [...die.classList]) if (c.startsWith('skin-')) die.classList.remove(c);
+    die.classList.add(`skin-${skin}`);
     die.classList.toggle('blank', !value);
     die.classList.toggle('numbered', Boolean(value) && sides > 6);
     die.setAttribute('aria-label', value ? `Die showing ${value}` : 'Die not rolled');
@@ -3053,9 +4382,13 @@
       return;
     }
     const on = PIPS[value];
+    const glyph = look('pips').glyph; // e.g. '❤️'; plain dots when undefined
     for (let i = 0; i < 9; i++) {
       const cell = document.createElement('span');
-      if (on.includes(i)) cell.className = 'pip';
+      if (on.includes(i)) {
+        cell.className = glyph ? 'pip pip-glyph' : 'pip';
+        if (glyph) cell.textContent = glyph;
+      }
       die.append(cell);
     }
   }
@@ -3065,10 +4398,18 @@
     const p = currentPlayer();
     el.turnPanel.style.setProperty('--turn-color', p.color);
     el.turnLabel.textContent =
-      game.phase === 'over' ? 'Game over' : game.mode === 'single' && !p.cpu ? 'Your turn' : `${p.name}'s turn`;
+      game.phase === 'over'
+        ? 'Game over'
+        : game.mode === 'class'
+          ? game.classroom.round
+            ? `Roll ${game.classroom.round} of ${game.classroom.view.settings.rounds}`
+            : 'Class game'
+          : game.mode === 'single' && !p.cpu
+            ? 'Your turn'
+            : `${p.name}'s turn`;
     el.rollBtn.disabled = game.phase !== 'roll';
     const realDice = game.diceMode === 'real';
-    el.rollBtn.hidden = p.cpu || realDice || !['roll', 'rolling'].includes(game.phase);
+    el.rollBtn.hidden = p.cpu || realDice || game.mode === 'class' || !['roll', 'rolling'].includes(game.phase);
     el.diceEntry.hidden = p.cpu || !realDice || game.phase !== 'roll';
     const dims = currentDims();
     el.rotateBtn.hidden = !(
@@ -3120,12 +4461,19 @@
       head.className = 'score-head';
       const name = document.createElement('span');
       name.className = 'score-name';
-      name.textContent = p.name;
+      name.textContent = p.avatar ? `${p.avatar} ${p.name}` : p.name;
+      if (p.title) {
+        name.append(make('span', 'player-title', p.title));
+      }
       const pts = document.createElement('span');
       pts.className = 'score-pts';
       pts.textContent = p.score;
       head.append(name, pts);
       card.append(head);
+      if (game.mode === 'class' && game.classroom.view && game.classroom.view.of > 1) {
+        const { you, of } = game.classroom.view;
+        card.append(make('div', 'score-rank', `🏫 ${you.tied ? 'Tied for ' : ''}${ordinal(you.rank)} of ${of} in the class`));
+      }
 
       if (p.log.length) {
         const log = document.createElement('ul');
@@ -3185,7 +4533,116 @@
       tagBg: v('--invert-bg'),
       tagInk: v('--invert-ink'),
     };
+    Object.assign(pal, BOARD_THEMES[settings.cosmetics.board] || {}); // Wardrobe board
   }
+
+  // Wardrobe boards: colours plus a little decoration. Graph paper follows the theme.
+  const BOARD_THEMES = {
+    graph: null,
+    notebook: { bg: '#fdfdf6', grid: '#b9d3ea', edge: '#2b2a33', hint: '#8a8f99', fade: 'rgba(253, 253, 246, 0.65)', decor: 'notebook' },
+    chalkboard: { bg: '#2f4f3a', grid: 'rgba(255, 255, 255, 0.16)', edge: '#1b3024', hint: '#d7e8dc', fade: 'rgba(47, 79, 58, 0.7)', wrong: '#c9d6cc', decor: 'chalk' },
+    beach: { bg: '#f4e1b0', grid: 'rgba(150, 110, 50, 0.25)', edge: '#b58a4a', hint: '#8a6a3a', fade: 'rgba(244, 225, 176, 0.65)', decor: 'sand' },
+    space: { bg: '#10143a', grid: 'rgba(255, 255, 255, 0.12)', edge: '#3a3f7a', hint: '#aab0e0', fade: 'rgba(16, 20, 58, 0.7)', wrong: '#aab0e0', decor: 'stars' },
+    snow: { bg: '#eef6ff', grid: '#c8dcf0', edge: '#7a9cc0', hint: '#6d86a4', fade: 'rgba(238, 246, 255, 0.65)', decor: 'flakes' },
+  };
+
+  // Repeatable pseudo-random numbers so decorations don't jump around on every redraw.
+  function decorRandom(seed) {
+    let a = seed;
+    return () => {
+      a = (a * 1103515245 + 12345) % 2147483648;
+      return a / 2147483648;
+    };
+  }
+
+  function drawBoardDecor(kind, cell) {
+    const r = decorRandom(7);
+    ctx.save();
+    if (kind === 'notebook') {
+      ctx.strokeStyle = 'rgba(230, 110, 110, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cell * 0.5, 0);
+      ctx.lineTo(cell * 0.5, cssSize);
+      ctx.stroke();
+    } else if (kind === 'stars' || kind === 'flakes' || kind === 'sand' || kind === 'chalk') {
+      const count = kind === 'sand' ? 260 : kind === 'chalk' ? 40 : 90;
+      for (let i = 0; i < count; i++) {
+        const x = r() * cssSize;
+        const y = r() * cssSize;
+        const size = kind === 'chalk' ? 6 + r() * 14 : 0.6 + r() * (kind === 'flakes' ? 2.2 : 1.6);
+        ctx.fillStyle =
+          kind === 'stars' ? `rgba(255, 255, 255, ${0.35 + r() * 0.6})` :
+          kind === 'flakes' ? 'rgba(160, 190, 225, 0.6)' :
+          kind === 'sand' ? 'rgba(160, 120, 60, 0.35)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Wardrobe rectangle patterns: light marks over your own rectangles.
+  const patternCache = {};
+  function rectPattern(kind) {
+    if (patternCache[kind]) return patternCache[kind];
+    const tile = document.createElement('canvas');
+    tile.width = tile.height = 16;
+    const g = tile.getContext('2d');
+    g.strokeStyle = g.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    g.lineWidth = 3;
+    if (kind === 'stripes') {
+      g.beginPath();
+      g.moveTo(-4, 20);
+      g.lineTo(20, -4);
+      g.moveTo(-4, 4);
+      g.lineTo(4, -4);
+      g.moveTo(12, 20);
+      g.lineTo(20, 12);
+      g.stroke();
+    } else if (kind === 'dots') {
+      g.beginPath();
+      g.arc(4, 4, 2.5, 0, Math.PI * 2);
+      g.arc(12, 12, 2.5, 0, Math.PI * 2);
+      g.fill();
+    } else if (kind === 'bricks') {
+      g.lineWidth = 1.5;
+      g.strokeRect(0, 0.75, 16, 7.5);
+      g.beginPath();
+      g.moveTo(8, 8);
+      g.lineTo(8, 16);
+      g.stroke();
+    } else if (kind === 'checker') {
+      g.fillRect(0, 0, 8, 8);
+      g.fillRect(8, 8, 8, 8);
+    } else if (kind === 'wood') {
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(0, 4);
+      g.bezierCurveTo(5, 2, 11, 6, 16, 4);
+      g.moveTo(0, 11);
+      g.bezierCurveTo(5, 13, 11, 9, 16, 11);
+      g.stroke();
+    }
+    return (patternCache[kind] = ctx.createPattern(tile, 'repeat'));
+  }
+
+  // ---- placing effects: redraw the board for a moment after a rectangle lands
+  const PLACE_FX_MS = 650;
+  let boardAnimUntil = 0;
+  function animateBoard(ms) {
+    const already = boardAnimUntil > performance.now();
+    boardAnimUntil = Math.max(boardAnimUntil, performance.now() + ms);
+    if (already) return;
+    const step = () => {
+      drawBoard();
+      if (performance.now() < boardAnimUntil) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  const easeOutBack = (t) => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
 
   function drawBoard() {
     if (!game || !cssSize) return;
@@ -3195,6 +4652,7 @@
     ctx.clearRect(0, 0, cssSize, cssSize);
     ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, cssSize, cssSize);
+    if (pal.decor) drawBoardDecor(pal.decor, cell);
 
     // grid
     ctx.strokeStyle = pal.grid;
@@ -3238,15 +4696,53 @@
     const y = rect.y * cell;
     const w = rect.w * cell;
     const h = rect.h * cell;
+    const t = rect.fx ? Math.min(1, (performance.now() - rect.placedAt) / PLACE_FX_MS) : 1;
+    if (rect.fx === 'pop' && t < 1) return drawPopIn(rect, color, cell, t);
+    const owner = game.players[rect.player];
+    ctx.save();
+    if (rect.fx === 'glow' && t < 1) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 36 * (1 - t);
+    }
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.82;
     ctx.fillRect(x, y, w, h);
-    ctx.globalAlpha = 1;
+    ctx.restore();
+    if (!owner.cpu && settings.cosmetics.pattern !== 'none') {
+      ctx.fillStyle = rectPattern(settings.cosmetics.pattern);
+      ctx.fillRect(x, y, w, h);
+    }
     ctx.strokeStyle = shade(color, -0.35);
     ctx.lineWidth = highlight ? 3.5 : 2;
     ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    if (rect.fx === 'ripple' && t < 1) {
+      const grow = t * cell * 0.9;
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x - grow, y - grow, w + grow * 2, h + grow * 2);
+      ctx.restore();
+    }
     if (game.counting && game.counting.rect === rect) drawCounting(game.counting, color, cell);
     else drawLabel(rect, x, y, w, h, cell);
+  }
+
+  // Pop-in: the squares spring up one after another.
+  function drawPopIn(rect, color, cell, t) {
+    const total = rect.w * rect.h;
+    ctx.fillStyle = color;
+    for (let k = 0; k < total; k++) {
+      const local = Math.max(0, Math.min(1, (t - (k / total) * 0.55) / 0.45));
+      if (!local) continue;
+      const s = easeOutBack(local);
+      const cx = (rect.x + (k % rect.w) + 0.5) * cell;
+      const cy = (rect.y + Math.floor(k / rect.w) + 0.5) * cell;
+      const half = (cell / 2) * s;
+      ctx.globalAlpha = 0.82;
+      ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Skip counting: rows (or columns) already counted stay bright and show the
