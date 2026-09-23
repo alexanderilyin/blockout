@@ -2,55 +2,61 @@
 
 A multiplication-as-area game for 3rd graders, based on "Blockout" from Math for Love. Two dice are rolled, you draw an a × b rectangle on a grid and answer a × b to claim it. It runs mainly on classroom Chromebooks.
 
-**The game itself has no dependencies and no build step.** It's plain HTML/CSS/JS and runs straight from `index.html`. npm packages (Playwright, jsQR) are for testing only.
+**A Turborepo of plain JavaScript** (ES modules, no framework), built with Vite. npm workspaces: `apps/*` and `packages/*`. The only runtime dependency is `qrcode-generator`. The server uses Node built-ins only, including `node:sqlite`.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `index.html` | Every screen and dialog (`.overlay > .dialog`), plus the Lucide icon sprite (`#i-*` symbols, used as `<svg class="icon"><use href="#i-name">`). |
-| `css/style.css` | All styles. Colors are tokens on `:root`, with dark-mode variants. |
-| `js/core.js` | `BlockoutCore`: the board, placement rules, dice, `rollForBoard`, difficulties (`DIFFICULTIES`, `diceFaces`, `createPairDice`, `fitsDifficulty`). Pure. |
-| `js/progress.js` | `BlockoutProgress`: wallet, `SHOP` (unlocks), achievements, fact stats, bonuses, practice picking, cheat codes, and `normalize` (save migrations). Pure. |
-| `js/cosmetics.js` | Wardrobe items; registers them into `Progress.SHOP`. |
-| `js/invite.js` | Invite links (`validate` whitelists every setting). |
-| `js/classroom.js` | Client for the classroom server (SSE with long-poll fallback, session in sessionStorage). |
-| `js/game.js` | All UI (~6000 lines, one IIFE): menu, game, practice, shop, wardrobe, stats, classroom screens, cheats. |
-| `server/classroom.js` | Zero-dependency Node server: static files (only `index.html`, `css/`, `js/`, `prototypes/`), JSON API, SSE plus `/poll`. |
-| `server/rooms.js` | Pure room logic: whole class, pairs, tournaments. |
-| `server/tournament.js` | Tournament formats: knockout, double elimination, round robin, Swiss, king of the hill. |
-| `server/moderation.js` | Username checks: `blocklist.txt`, plus OpenAI moderation only when `OPENAI_API_KEY` is set (fails open). |
-| `prototypes/` | Other operations (addition, subtraction, division, fractions). Single player and practice only. Shares `prototypes/shared/`. |
-| `js/auth.js` | `BlockoutAuth`: sign-in (dev or Keycloak PKCE), the bearer token, per-account progress key and sync with the server. |
-| `js/accounts.js` | Account screens: sign in, student homework, teacher My classes, parent My kids, live tournament banner. Uses `window.BlockoutGame` (a small API game.js exposes). |
-| `server/store.js` | sqlite (`node:sqlite`) storage for accounts; `data/blockout.db` or `BLOCKOUT_DB` (`:memory:` in tests). |
-| `server/auth.js` | Sign-in providers behind one interface: dev (HMAC JWT) and Keycloak (RS256 via JWKS); `identity()` keeps only first name, last initial, role, email domain. |
-| `server/accounts.js` | Account rules: classes and rosters, homework, parent links, scheduled tournaments. |
-| `docs/` | `privacy.md`, and the v0.3.0 plan and log. |
-| `test/*.test.js` | `node:test` unit tests for the pure modules and the server rooms. |
+| `apps/multiplication` | The main game, at `/`. `index.html` has every screen and dialog (`.overlay > .dialog`). `src/main.js` loads the styles, `src/game/index.js`, then `src/accounts.js`. |
+| `apps/multiplication/src/game/*.js` | The game UI, one module per area: `base` (constants, `el`), `wallet`, `settings`, `wardrobe`, `play` (game state and turns), `stats`, `shop`, `achievements`, `practice`, `invites`, `classroom`, `cheats`, `checkin`, `input`, `render`. See "How the game modules load" below. |
+| `apps/multiplication/src/accounts.js` | Account screens: sign in, student homework (Play › starts the game), teacher My classes, parent My kids, live tournament banner. Imports what it needs from `src/game/api.js`. |
+| `apps/multiplication/src/invite.js` | Invite links (`validate` whitelists every setting). |
+| `apps/<operation>` (7), `apps/more-games` | The other games (`/addition/`, …), each a tiny app running `@blockout/game-kit`, plus the More games hub (`/more-games/`). |
+| `apps/server/src/index.js` | Node server: the built apps (`apps/<name>/dist`; multiplication at `/`), JSON API, SSE plus `/poll` for classrooms, accounts routes. |
+| `apps/server/src/rooms.js`, `tournament.js` | Pure room logic: whole class, pairs, tournaments (knockout, double elimination, round robin, Swiss, king of the hill). |
+| `apps/server/src/moderation.js` | Username checks: `blocklist.txt`, plus OpenAI moderation only when `OPENAI_API_KEY` is set (fails open). |
+| `apps/server/src/store.js`, `auth.js`, `accounts.js` | Accounts: sqlite storage (`data/blockout.db` at the repo root, or `BLOCKOUT_DB`; `:memory:` in tests); sign-in providers behind one interface (dev HMAC JWT, Keycloak RS256 via JWKS; `identity()` keeps only first name, last initial, role, email domain); the rules (classes, rosters, homework, parent links, scheduled tournaments). |
+| `packages/engine` | `@blockout/engine`: board, placement, dice, `rollForBoard`, difficulties (`DIFFICULTIES`, `diceFaces`, `createPairDice`, `fitsDifficulty`), CPU. `@blockout/engine/{fraction,boards,variants}`: the other operations' rules. Pure. |
+| `packages/progress` | `@blockout/progress`: wallet, `SHOP` (unlocks), achievements, fact stats, bonuses, practice picking, homework goals and options, cheat codes, `normalize` (save migrations). `@blockout/progress/cosmetics`: the Wardrobe (registers its items into `SHOP`). Pure. |
+| `packages/ui` | `@blockout/ui`: CSS in `src/css/*` (tokens, base, menu, game, dice skins, results, panels, rewards, wardrobe, players), the Lucide icon sprite (`icons.svg`), DOM helpers, and `@blockout/ui/vite` (`blockoutPage()`: adds the theme script and the sprite to every page). |
+| `packages/game-kit` | `@blockout/game-kit`: `startGame(variantId)`, the shared page engine of the other games, and their `style.css`. |
+| `packages/classroom`, `packages/auth` | Browser clients: classroom server (SSE with long-poll fallback, session in sessionStorage); sign-in (dev or Keycloak PKCE), bearer token, per-account progress key and sync. |
+| `docs/` | The MkDocs Material site (`mkdocs.yml`): `home/`, `guides/`, `concepts/`, `reference/`, `project/`, `decisions/` (ADRs), `privacy.md`, screenshots in `assets/screenshots/`. The v0.3.0 plan and log are kept out of the nav. |
+| `.github/` | CI (`workflows/ci.yml`: lint, test, build, strict docs build; actions pinned to commit SHAs) and Dependabot. |
 
-Browser script load order (index.html): core → progress → auth → cosmetics → invite → vendor/qrcode → classroom → game → accounts. Modules are UMD-style: `window.BlockoutX` in the browser, `require()` in tests.
+Tests live next to their code (`packages/*/test`, `apps/*/test`, `node:test`).
+
+### How the game modules load
+Every module in `src/game/` only declares things when it's imported. What used to run at load (event listeners, the initial render, `const el = {…}`) is in each module's `export function run()`, and `src/game/index.js` calls every `run()` in a fixed order. Keep it that way:
+- **No load-time work outside `run()`,** except declarations that run nothing.
+- **Cross-module writes go through a setter:** `setGame`, `setGameId`, `setPractice` and `setWardrobeFilter`; the imported binding is read-only.
+- **Imports between modules are circular.** That's fine as long as nothing is used before `run()`.
 
 ## Commands
 
 ```sh
-npm test                                   # node --test test/*.test.js (must stay green)
-node server/classroom.js 8080              # game and classroom server at http://localhost:8080
-node server/classroom.js 8080 --public-url https://<name>.trycloudflare.com   # behind a Cloudflare tunnel
+npm test            # every package's tests through Turborepo (must stay green)
+npm run lint        # ESLint (eslint.config.js)
+npm run build       # Vite builds every app into apps/*/dist
+npm start           # build, then serve everything on http://localhost:8080
+npm start -- --public-url https://<name>.trycloudflare.com   # behind a Cloudflare tunnel
+npm run dev         # Vite dev servers (multiplication on :5173, proxying /api) + the server with --watch
 cloudflared tunnel --url http://localhost:8080
 ```
 
 - **The dev server:** the user usually keeps one running on 8080 behind a Cloudflare quick tunnel. The tunnel URL changes, so ask for it or reuse the last one given.
-- **When to restart it:** only after changing `server/*`. Client files are served `no-cache`, so a page reload picks them up.
+- **After client changes:** rebuild (`npm run build`). Built assets are hashed and `index.html` is served `no-cache`, so a page reload picks them up.
+- **After server changes:** restart the server.
 - **Setup:** `.devcontainer/postCreateCommand.sh` installs the npm packages, Playwright Chromium with its libraries, and cloudflared.
 
 ## Browser testing (Playwright)
 
-Write throwaway scripts in the session scratchpad, not the repo. Require Playwright from `/workspaces/blockout/node_modules/playwright`, and spawn a private server on a spare port (8134+) that you kill at the end. The pattern:
+Write throwaway scripts in the session scratchpad, not the repo. Build first (`npm run build`), require Playwright from `/workspaces/blockout/node_modules/playwright`, and spawn a private server on a spare port (8134+) that you kill at the end. The pattern:
 
 ```js
 const { chromium } = require('/workspaces/blockout/node_modules/playwright');
-const srv = spawn('node', ['/workspaces/blockout/server/classroom.js', '8135'], { stdio: 'ignore' });
+const srv = spawn('node', ['/workspaces/blockout/apps/server/src/index.js', '8135'], { stdio: 'ignore', env: { ...process.env, BLOCKOUT_DB: ':memory:' } });
 // seed a save before the page loads (once per tab):
 await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionStorage.setItem('s', 1);
   localStorage.setItem('blockout.progress', JSON.stringify(pr)); } }, progress);
@@ -64,6 +70,7 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
 - **Check for errors:** collect `pageerror` events and check there are none. Screenshot and look at the result.
 - **Classroom flows:** use several browser contexts (a teacher plus students). Hosting needs a teacher sign-in: POST `/api/auth/dev` with `{ role: 'teacher', firstName, schoolId: 'cadence-park' }` and store `{ token, user }` in `localStorage['blockout.auth']`, or use the sign-in dialog.
 - **Accounts:** start the test server with `BLOCKOUT_DB=:memory:` so runs don't share data.
+- **Other games:** they're at `/<id>/`. `window.PROTO_FAST = true` (an init script) makes the CPU quick, and `window.ProtoGame` exposes `state()`, `piece()` and `boards`.
 
 ## Storage
 
@@ -80,7 +87,7 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
   - Only the next step shows its name and price. Later steps are blurred "skeleton" placeholders with a lock (`Progress.isHidden`, `setLockBadge`).
   - Reveal gates: `winOn` (win on the previous board), `masterUpTo` / `mastery` (Times Table mastery, via `tableReady`).
   - `perk` text appears in the unlock dialog and the shop.
-  - Buying from a menu control activates it (the `ACTIVATE` map in game.js).
+  - Buying from a menu control activates it (the `ACTIVATE` map in `src/game/shop.js`).
 - **Per-difficulty unlocks:** each difficulty has its own Expert level, timers and practice question counts (`gameExpertId`, `gameTimerId`, `practiceCountId`, `practiceTimerId`, `practiceExpertId`).
 - **Difficulties:**
 
@@ -95,7 +102,7 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
 
   Tricky, Master and Legend use pair dice (`createPairDice`) and virtual dice only. Pair dice make big rectangles rarer on smaller boards (`PAIR_ROOM`), and near the end they fall back to small facts that fit, so games last about as long as on Hard (a test checks this). Classroom stays on Easy, Medium and Hard.
 - **Classroom games are unlock-free:** every lobby setting is free and cheats are off.
-- **Bonuses** are in progress.js (`answerBonus`, `timerBonus`, `boardFinishBonus`, `practiceFinishBonus`). Tell the player about them in the menu hints and the unlock dialogs.
+- **Bonuses** are in `@blockout/progress` (`answerBonus`, `timerBonus`, `boardFinishBonus`, `practiceFinishBonus`). Tell the player about them in the menu hints and the unlock dialogs.
 - **Achievements:**
   - They show one at a time as a WoW-style banner (`celebrate`, then a queue).
   - Results screens stay minimal: no points line, stickers row or achievement list. Actions go on one row of equal buttons.
@@ -106,11 +113,26 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
   - Each code gets its own secret achievement `cheat_<code>` (a test enforces this).
 - **Dialogs** have a bottom `.dialog-actions` button panel, like the Shop.
 - **Accounts are optional:** guests must always be able to play everything except hosting a class. Store as little about children as possible (see docs/privacy.md).
+- **Homework** only asks for what the child can already play (`Progress.availableOptions`, `sharedOptions` for a class). Tapping it sets up the menu and starts the game.
 - **The audience is 8-year-olds:** use short, friendly, concrete wording ("Help me count", "Needs practice"). Target devices are Chromebooks, and it must work at phone width too.
+
+## Docs, changelog and commits
+
+- **Docs** follow the site's structure:
+  - guides for doing things (with screenshots)
+  - `concepts/` for why things are the way they are
+  - `reference/` for facts to look up (`CONFIGURATION.md`, `HTTP-API.md`)
+
+  Every page starts with a `<title>`. Check with `mkdocs build --strict` (Python venv with `docs/requirements.txt`).
+- **Screenshots** in `docs/assets/screenshots/` come from Playwright runs of the real game on a fresh server (1280 px wide). Retake them when a pictured screen changes.
+- **CHANGELOG.md** follows Keep a Changelog: user-facing changes under `[Unreleased]`, by category. The version follows SemVer; it's 0.x, so a minor bump for new features.
+- **Decisions:** a hard-to-reverse decision gets an ADR in `docs/decisions/`. Never edit an accepted ADR; supersede it with a new one.
+- **Commits** follow Conventional Commits (`feat(accounts): …`, `fix(server): …`, `docs: …`, `refactor: …`, `build: …`, `ci: …`).
+- **Server errors** are RFC 9457 problem details (`sendProblem`), keeping the `error` and `message` members the clients read.
 
 ## Code style
 
-- **Match the surrounding code:** vanilla ES2020, 2-space indent, single quotes, `const` arrow helpers, short comments explaining *why*.
-- **No frameworks, bundlers or runtime dependencies.** The server uses only Node built-ins.
-- **Keep logic testable:** pure logic belongs in `core.js` / `progress.js` / `rooms.js` / `tournament.js` with unit tests, and `game.js` stays the UI.
-- **Keep the tests green.** Add tests for new rules; run `npm test` before finishing.
+- **Match the surrounding code:** modern JavaScript ES modules, 2-space indent, single quotes, `const` arrow helpers, short comments explaining *why*.
+- **No frameworks.** Keep runtime dependencies to a minimum; the server uses only Node built-ins.
+- **Keep logic testable:** pure logic belongs in `packages/engine`, `packages/progress` or `apps/server/src/{rooms,tournament,accounts}.js`, with unit tests. The game modules stay the UI.
+- **Keep the tests and lint green.** Add tests for new rules, and run `npm test && npm run lint` before finishing.

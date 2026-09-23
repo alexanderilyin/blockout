@@ -1,3 +1,5 @@
+<title>Privacy</title>
+
 # Blockout and children's privacy
 
 Blockout is used by 3rd graders, mostly under 13, starting at Cadence Park (Irvine Unified School District, California). That brings in FERPA (student education records), COPPA (children under 13 online) and California's SOPIPA (student data held by K–12 services). This page says what we keep and why.

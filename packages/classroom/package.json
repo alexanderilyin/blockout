@@ -1,0 +1,16 @@
+{
+  "name": "@blockout/classroom",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Browser client for the classroom server: requests, live updates (SSE with long-poll fallback) and the class session.",
+  "type": "module",
+  "exports": {
+    ".": "./src/client.js"
+  },
+  "dependencies": {
+    "@blockout/auth": "*"
+  },
+  "scripts": {
+    "lint": "eslint src"
+  }
+}

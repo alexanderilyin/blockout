@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Sets up the dev container with everything used to build and test Blockout:
-#   - npm dev dependencies from package.json: Playwright (browser tests) and jsQR
-#     (reading the QR codes the game draws)
+#   - npm packages from package.json: Turborepo, Vite and ESLint, plus Playwright
+#     (browser tests) and jsQR (reading the QR codes the game draws)
 #   - Chromium for Playwright, plus the Linux libraries it needs
 #   - cloudflared, for sharing the classroom server through a Cloudflare tunnel
-# The game itself has no dependencies: it runs from index.html, and the classroom
-# server is plain Node (node server/classroom.js).
+#   - python3-venv, to build the docs site (see docs/project/installing.md)
+# Blockout is a Turborepo (npm workspaces): apps/* and packages/*, built with Vite.
+# The server (apps/server) uses Node's built-ins only, including node:sqlite.
 #
 # Safe to run again: each step skips what's already there.
 set -euo pipefail
@@ -20,12 +21,19 @@ if [ "$(id -u)" -ne 0 ]; then
   if command -v sudo >/dev/null 2>&1; then SUDO='sudo'; else echo "Needs root or sudo for system packages." >&2; exit 1; fi
 fi
 
-say "npm packages (Playwright, jsQR)"
+say "npm packages (Turborepo, Vite, ESLint, Playwright, jsQR)"
 if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 say "Chromium for Playwright, with its system libraries"
 # --with-deps installs the Debian packages Chromium needs (fonts, NSS, …)
 npx --yes playwright install --with-deps chromium
+
+say "Python venv (for the docs site: MkDocs Material)"
+if python3 -c 'import ensurepip' >/dev/null 2>&1; then
+  echo "already there"
+else
+  $SUDO apt-get install -y -qq python3-venv
+fi
 
 say "cloudflared (Cloudflare tunnels)"
 if command -v cloudflared >/dev/null 2>&1; then
@@ -42,14 +50,16 @@ fi
 say "Checking"
 node --version
 npx playwright --version
-node --test test/*.test.js 2>&1 | grep -E '^ℹ (tests|pass|fail)' || true
+npm test 2>&1 | grep -E 'ℹ (pass|fail)|Tasks:' || true
 
 cat <<'EOF'
 
 Ready. Handy commands:
-  npm test                      unit tests
-  npm run classroom             classroom server on http://localhost:8080
+  npm test                      unit tests (every app and package)
+  npm run lint                  ESLint
+  npm run dev                   Vite dev servers + the API server (game at http://localhost:5173)
+  npm start                     build everything and serve it on http://localhost:8080
   cloudflared tunnel --url http://localhost:8080
                                 share it; then restart the server with
-                                npm run classroom -- --public-url https://<tunnel>.trycloudflare.com
+                                npm start -- --public-url https://<tunnel>.trycloudflare.com
 EOF

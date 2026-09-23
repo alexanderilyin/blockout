@@ -9,8 +9,8 @@
 	// "features": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// The classroom server (npm run classroom)
-	"forwardPorts": [8080],
+	// The Blockout server (npm start) and the Vite dev server (npm run dev)
+	"forwardPorts": [8080, 5173],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// Playwright + Chromium for the browser tests, and cloudflared for tunnels

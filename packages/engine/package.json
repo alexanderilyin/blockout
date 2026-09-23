@@ -1,0 +1,17 @@
+{
+  "name": "@blockout/engine",
+  "version": "0.3.0",
+  "private": true,
+  "description": "The board, dice, placement and CPU for multiplication (core.js), and the rules of the other operations (ops/).",
+  "type": "module",
+  "exports": {
+    ".": "./src/core.js",
+    "./fraction": "./src/ops/fraction.js",
+    "./boards": "./src/ops/boards.js",
+    "./variants": "./src/ops/variants.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "lint": "eslint src test"
+  }
+}
