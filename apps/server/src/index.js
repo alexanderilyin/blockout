@@ -608,7 +608,7 @@ setInterval(() => {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   server.listen(PORT, () => {
-    console.log(`Blockout classroom server on http://localhost:${PORT}/`);
+    console.log(`Blockout server on http://localhost:${PORT}/`);
     for (const url of lanUrls()) console.log(url === PUBLIC_URL ? `  Students join at: ${url}` : `  Chromebooks on this network: ${url}`);
     console.log(`  Name check: word list${OPENAI_API_KEY ? ' + OpenAI moderation' : ' (set OPENAI_API_KEY to add OpenAI moderation)'}`);
     console.log(`  Sign-in: ${auth.name === 'dev' ? 'dev sign-in (pick any name and role; set BLOCKOUT_AUTH=keycloak for Keycloak)' : `Keycloak at ${auth.config.issuer}`}`);

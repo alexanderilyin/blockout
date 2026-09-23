@@ -44,7 +44,7 @@ You roll a 5 and a 3. You draw a 5 × 3 rectangle anywhere it fits, touching wha
 
     ---
 
-    The same roll, place and answer loop for addition, subtraction, division and fractions.
+    The same roll, place and answer loop for addition, subtraction, division and fractions, each with its own points, shop, achievements and stats.
 
     [:octicons-arrow-right-24: Playing](../guides/playing.md#more-games)
 

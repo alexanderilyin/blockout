@@ -16,14 +16,16 @@ Work towards 0.3.0 on the `v0.3.0` branch. Details and decisions: [the v0.3.0 wo
 - Homework only offers what the child can already play, and "Play ›" starts it straight away.
 - A signed-in student's progress follows them to any device; the first time on a device, that device's guest progress is added to the account.
 - Tricky, Master and Legend difficulties after Hard, and the IDDQD and FIVEMOREMINUTESMOM cheat codes, each with a secret achievement.
-- More games: addition, subtraction, division and four fraction games, reachable from the main menu.
+- More games: addition, subtraction, division and four fraction games, reachable from the main menu. Each has Single player, Home (two players on one screen) and Practice, its own points, a shop (Medium, then Hard; 20-question rounds, then Expert practice; Home multiplayer), achievements and stats.
 
 ### Changed
+- In the other games, Medium, Hard, 20-question practice, Expert practice and Home multiplayer are now unlocked with points.
 - Hosting a class now needs a teacher sign-in.
 - Legend deals teens (like 14 × 7) for half of its rolls and Tricky facts for the rest; Tricky, Master and Legend games now last about as long as Hard ones.
 - The project is now a Turborepo of Vite apps and shared packages. `npm start` builds and serves everything; the other games moved from `prototypes/*.html` to `/<name>/`.
 
 ### Security
+- API errors no longer carry internal details, and every response has basic browser security headers.
 - Only a student's first name, last initial, role and email domain are stored; see [Privacy](https://github.com/alexanderilyin/blockout/blob/v0.3.0/docs/privacy.md).
 
 ## [0.2.0] - 2026-09-23

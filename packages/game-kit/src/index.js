@@ -1,11 +1,15 @@
 // The shared page engine for Blockout's other games (addition, subtraction,
 // division and the four fraction games): one UI, driven by an operation's rules
-// from @blockout/engine/variants. Single player (you vs the CPU) and Practice.
+// from @blockout/engine/variants. Single player (you vs the CPU), Home
+// multiplayer (two players on one screen) and Practice, with points, a shop,
+// achievements and stats (./meta.js).
 //   import { startGame } from '@blockout/game-kit';
 //   startGame('addition');
 import * as Fr from '@blockout/engine/fraction';
 import * as B from '@blockout/engine/boards';
 import * as Variants from '@blockout/engine/variants';
+import { toast, queueAchievements, confettiFullScreen } from '@blockout/ui/rewards';
+import * as M from './meta.js';
 
 export function startGame(variantId) {
 
@@ -13,7 +17,11 @@ export function startGame(variantId) {
   if (!V) throw new Error(`No game called ${variantId}`);
 
   const COLORS = ['#e4572e', '#2e86de'];
-  const NAMES = ['You', 'CPU'];
+  const CPU_NAMES = ['You', 'CPU'];
+  const HOME_NAMES = ['Player 1', 'Player 2'];
+  const META_KEY = `blockout.game.${V.id}`; // points, unlocks, achievements, stats
+  const ITEMS = M.shopFor(V);
+  const ACHIEVEMENTS = M.achievementsFor(V);
   const CPU_STEP_MS = window.PROTO_FAST ? 30 : 1000; // PROTO_FAST: quick CPU for automated checks
   const ROLL_MS = 550;
   const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
@@ -37,6 +45,25 @@ export function startGame(variantId) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const fmtScore = (f) => Fr.mixed(f);
 
+  // ---------------------------------------------------------------- points, unlocks, achievements
+
+  const meta = (() => {
+    try {
+      return M.normalizeMeta(JSON.parse(localStorage.getItem(META_KEY)));
+    } catch (e) {
+      return M.createMeta();
+    }
+  })();
+  function saveMeta() {
+    try {
+      localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (e) {}
+    const w = document.getElementById('wallet-amount');
+    if (w) w.textContent = meta.wallet;
+  }
+  const names = () => (game && game.multi ? HOME_NAMES : CPU_NAMES);
+  const celebrateAll = (earned) => earned.length && queueAchievements(earned);
+
   function loadSettings() {
     const d = { mode: 'cpu', level: 'easy', count: 10, practiceLevel: 'learn', families: V.practice.defaults };
     try {
@@ -59,15 +86,21 @@ export function startGame(variantId) {
   <main id="start-screen" class="screen">
     <div class="start-card">
       <a class="back-link" href="/more-games/">${icon('arrow-left')} More games</a>
+      <div class="top-row"><div class="wallet" title="Points you can spend in the shop">🪙 <span id="wallet-amount">0</span> points</div></div>
       <h1 class="logo">BLOCK<span>OUT</span></h1>
       <p class="variant-name"><span class="op-badge">${esc(V.op)}</span> ${esc(V.name)} · <strong>${esc(V.title)}</strong></p>
       <p class="tagline">${esc(V.tagline)}</p>
       <form id="setup-form" autocomplete="off">
-        <div class="mode-picker two" role="radiogroup" aria-label="Game mode">
+        <div class="mode-picker" role="radiogroup" aria-label="Game mode">
           <button type="button" class="mode-card" data-mode="cpu" role="radio">
             <span class="mode-icon">${icon('user')}</span>
             <span class="mode-title">Single player</span>
             <span class="mode-sub">You vs the CPU</span>
+          </button>
+          <button type="button" class="mode-card" data-mode="multi" role="radio">
+            <span class="mode-icon">${icon('users')}</span>
+            <span class="mode-title">Home</span>
+            <span class="mode-sub">2 players, one screen</span>
           </button>
           <button type="button" class="mode-card" data-mode="practice" role="radio">
             <span class="mode-icon">${icon('target')}</span>
@@ -107,8 +140,11 @@ export function startGame(variantId) {
         </div>
         <button type="submit" class="btn btn-primary btn-big" id="start-btn">Start game</button>
       </form>
-      <div class="menu-actions one">
-        <button type="button" class="btn btn-small" id="howto-btn">${icon('circle-help')} How to play &amp; the idea</button>
+      <div class="menu-actions">
+        <button type="button" class="btn btn-small" id="howto-btn">${icon('circle-help')} How to play</button>
+        <button type="button" class="btn btn-small" id="shop-btn">${icon('shopping-cart')} Shop</button>
+        <button type="button" class="btn btn-small" id="achievements-btn">${icon('trophy')} Achievements</button>
+        <button type="button" class="btn btn-small" id="stats-btn">${icon('chart-column')} Stats</button>
       </div>
     </div>
   </main>
@@ -171,6 +207,45 @@ export function startGame(variantId) {
     </div>
   </div>
 
+  <div class="overlay" id="unlock" hidden>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="unlock-title">
+      <h2 id="unlock-title"></h2>
+      <p class="result-sub" id="unlock-text"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="unlock-no">Not now</button>
+        <button type="button" class="btn btn-primary" id="unlock-yes"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="shop" hidden>
+    <div class="dialog shop-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-title">
+      <h2 id="shop-title">${icon('shopping-cart')} Shop</h2>
+      <p class="setting-help">Points come from right answers (more for right first time and streaks), wins and finished practice rounds.</p>
+      <div id="shop-list"></div>
+      <div class="dialog-actions wallet-bar">
+        <div class="wallet-line">🪙 <strong id="shop-wallet">0</strong></div>
+        <button type="button" class="btn btn-primary" id="shop-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="achievements" hidden>
+    <div class="dialog achievements-dialog" role="dialog" aria-modal="true" aria-labelledby="achievements-title">
+      <h2 id="achievements-title">${icon('trophy')} Achievements</h2>
+      <div id="achievements-list" class="achievement-list"></div>
+      <div class="dialog-actions"><button type="button" class="btn btn-primary" id="achievements-done">Done</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="stats" hidden>
+    <div class="dialog history-dialog" role="dialog" aria-modal="true" aria-labelledby="stats-title">
+      <h2 id="stats-title">${icon('chart-column')} Stats</h2>
+      <div id="stats-body"></div>
+      <div class="dialog-actions"><button type="button" class="btn btn-primary" id="stats-done">Done</button></div>
+    </div>
+  </div>
+
   <div class="overlay" id="over" hidden>
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="over-title">
       <h2 id="over-title"></h2>
@@ -217,7 +292,37 @@ export function startGame(variantId) {
   if (!V.levels[settings.level]) settings.level = 'easy';
   settings.families = settings.families.filter((id) => V.practice.families.some((f) => f.id === id));
 
+  // A locked choice shows "🔒 price" (or just a lock further down a chain)
+  function setLock(btn, id) {
+    const locked = !M.isUnlocked(meta, id);
+    const hidden = locked && M.isHidden(meta, ITEMS, id);
+    btn.classList.toggle('locked', locked);
+    btn.classList.toggle('skeleton', hidden);
+    btn.dataset.unlock = locked ? id : '';
+    let badge = btn.querySelector('.lock-badge');
+    if (locked && !badge) {
+      badge = make('span', 'lock-badge');
+      btn.append(badge);
+    }
+    if (badge && !locked) badge.remove();
+    if (badge && locked) badge.innerHTML = `${icon('lock')}${hidden ? '' : ` ${M.shopItem(ITEMS, id).price}`}`;
+  }
+
+  // Anything picked before it was locked (or never bought) goes back to the free choice
+  function enforceLocks() {
+    if (!M.isUnlocked(meta, M.unlockForLevel(settings.level))) settings.level = 'easy';
+    if (!M.isUnlocked(meta, M.unlockForCount(settings.count))) settings.count = 10;
+    if (settings.practiceLevel === 'expert' && !M.isUnlocked(meta, 'practiceExpert')) settings.practiceLevel = 'learn';
+    if (settings.mode === 'multi' && !M.isUnlocked(meta, 'multiplayer')) settings.mode = 'cpu';
+  }
+
   function renderSetup() {
+    enforceLocks();
+    for (const b of document.querySelectorAll('#level button')) setLock(b, M.unlockForLevel(b.dataset.level));
+    for (const b of document.querySelectorAll('#practice-count button')) setLock(b, M.unlockForCount(b.dataset.count));
+    setLock(document.querySelector('#practice-level [data-plevel="expert"]'), 'practiceExpert');
+    setLock(document.querySelector('.mode-card[data-mode="multi"]'), 'multiplayer');
+    saveMeta();
     for (const b of document.querySelectorAll('.mode-card')) {
       const on = b.dataset.mode === settings.mode;
       b.classList.toggle('selected', on);
@@ -237,26 +342,30 @@ export function startGame(variantId) {
         : `Expert: ${V.practice.seconds} seconds a question, one try, no help.`;
     const n = practiceFacts().length;
     $('families-help').textContent = settings.families.length ? `${n} different questions.` : 'Pick at least one.';
+    const finish = M.practiceFinishBonus(settings.count, settings.practiceLevel === 'expert');
+    $('families-help').textContent += finish ? ` Finish all ${settings.count} for +${finish} bonus points.` : '';
     $('start-btn').textContent = practice ? 'Start practice' : 'Start game';
     $('start-btn').disabled = practice && !settings.families.length;
     saveSettings();
   }
 
+  // A locked button offers to unlock it instead
+  const unlocking = (b) => b && b.dataset.unlock && (askUnlock(b.dataset.unlock), true);
   document.querySelector('.mode-picker').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mode]');
-    if (b) (settings.mode = b.dataset.mode), renderSetup();
+    if (b && !unlocking(b)) (settings.mode = b.dataset.mode), renderSetup();
   });
   $('level').addEventListener('click', (e) => {
     const b = e.target.closest('[data-level]');
-    if (b) (settings.level = b.dataset.level), renderSetup();
+    if (b && !unlocking(b)) (settings.level = b.dataset.level), renderSetup();
   });
   $('practice-count').addEventListener('click', (e) => {
     const b = e.target.closest('[data-count]');
-    if (b) (settings.count = Number(b.dataset.count)), renderSetup();
+    if (b && !unlocking(b)) (settings.count = Number(b.dataset.count)), renderSetup();
   });
   $('practice-level').addEventListener('click', (e) => {
     const b = e.target.closest('[data-plevel]');
-    if (b) (settings.practiceLevel = b.dataset.plevel), renderSetup();
+    if (b && !unlocking(b)) (settings.practiceLevel = b.dataset.plevel), renderSetup();
   });
   $('families').addEventListener('click', (e) => {
     const b = e.target.closest('[data-family]');
@@ -282,6 +391,135 @@ export function startGame(variantId) {
     return [...seen.values()];
   }
 
+  // ---------------------------------------------------------------- shop, achievements, stats
+
+  const openDialog = (id) => ($(id).hidden = false);
+  const closeDialog = (id) => ($(id).hidden = true);
+  for (const id of ['unlock', 'shop', 'achievements', 'stats']) {
+    $(id).addEventListener('click', (e) => e.target === $(id) && closeDialog(id));
+    $(id).addEventListener('keydown', (e) => e.key === 'Escape' && closeDialog(id));
+  }
+
+  // "Unlock Medium for 120 points?" from a locked menu button or the shop
+  function askUnlock(id) {
+    let item = M.shopItem(ITEMS, id);
+    // further down a chain: offer the step before it
+    while (item.requires && !M.isUnlocked(meta, item.requires)) item = M.shopItem(ITEMS, item.requires);
+    const check = M.canBuy(meta, ITEMS, item.id);
+    $('unlock-title').textContent = item.id === id ? `Unlock ${item.name.split(':')[0]}?` : `First: ${item.name.split(':')[0]}`;
+    $('unlock-text').textContent =
+      `${item.name}.${item.perk ? ` ${item.perk}` : ''} ` +
+      (check.ok ? `It costs ${item.price} of your ${meta.wallet} points.` : `It costs ${item.price} points: ${check.need} more to go. Right answers, wins and practice earn them.`);
+    const yes = $('unlock-yes');
+    yes.textContent = `🪙 ${item.price}`;
+    yes.disabled = !check.ok;
+    yes.onclick = () => {
+      if (!M.buy(meta, ITEMS, item.id).ok) return;
+      saveMeta();
+      toast(`🔓 Unlocked: ${item.name.split(':')[0]}`, `-${item.price} points`);
+      closeDialog('unlock');
+      renderSetup();
+      if (!$('shop').hidden) renderShop();
+    };
+    openDialog('unlock');
+    (check.ok ? yes : $('unlock-no')).focus();
+  }
+  $('unlock-no').addEventListener('click', () => closeDialog('unlock'));
+
+  function renderShop() {
+    const list = $('shop-list');
+    list.innerHTML = '';
+    let group = null;
+    for (const item of ITEMS) {
+      if (item.group !== group) {
+        group = item.group;
+        list.append(make('h3', 'stats-heading', group));
+      }
+      const owned = M.isUnlocked(meta, item.id);
+      const hidden = !owned && M.isHidden(meta, ITEMS, item.id);
+      const row = make('div', `shop-item${owned ? ' owned' : ''}${hidden ? ' skeleton-row' : ''}`);
+      const text = make('div', 'shop-text');
+      text.append(make('strong', null, hidden ? '???' : item.name));
+      if (!hidden && item.perk) text.append(make('span', 'shop-perk', item.perk));
+      if (hidden) text.append(make('span', 'shop-perk', 'Unlock the one before it first.'));
+      row.append(text);
+      if (owned) row.append(make('span', 'shop-owned', '✓ Unlocked'));
+      else if (!hidden) {
+        const b = make('button', `btn btn-small${M.canBuy(meta, ITEMS, item.id).ok ? ' btn-primary' : ''}`, `🪙 ${item.price}`);
+        b.type = 'button';
+        b.addEventListener('click', () => askUnlock(item.id));
+        row.append(b);
+      }
+      list.append(row);
+    }
+    $('shop-wallet').textContent = meta.wallet;
+  }
+  $('shop-btn').addEventListener('click', () => (renderShop(), openDialog('shop')));
+  $('shop-done').addEventListener('click', () => closeDialog('shop'));
+
+  function renderAchievements() {
+    const list = $('achievements-list');
+    list.innerHTML = '';
+    const got = ACHIEVEMENTS.filter((a) => meta.achievements[a.id]).length;
+    list.append(make('p', 'stats-summary', `${got} of ${ACHIEVEMENTS.length} earned`));
+    for (const a of ACHIEVEMENTS) {
+      const when = meta.achievements[a.id];
+      const row = make('div', `achievement${when ? ' earned' : ''}`);
+      const badge = make('span', 'achievement-icon');
+      badge.innerHTML = when ? esc(a.icon) : icon('lock');
+      const text = make('div', 'achievement-text');
+      text.append(make('strong', null, a.name), make('span', null, a.desc));
+      row.append(badge, text, make('span', 'achievement-reward', when ? new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : `+${a.reward}`));
+      list.append(row);
+    }
+  }
+  $('achievements-btn').addEventListener('click', () => (renderAchievements(), openDialog('achievements')));
+  $('achievements-done').addEventListener('click', () => closeDialog('achievements'));
+
+  // Totals, then every practice family's questions coloured by how well they're known
+  const STATUS = { mastered: 'Mastered', learning: 'Learning', practice: 'Needs practice', unseen: 'Not seen yet' };
+  function renderStats() {
+    const body = $('stats-body');
+    body.innerHTML = '';
+    const c = meta.counters;
+    const table = make('table', 'stats-table');
+    for (const [label, value] of [
+      ['Games against the CPU', c.games],
+      ['Wins', c.wins],
+      ['Practice rounds', c.practiceRounds],
+      ['Perfect practice rounds', c.perfectRounds],
+      ['Right answers', c.correct],
+      ['Best streak (right first time)', c.bestStreak],
+      ['Points earned', meta.earned],
+    ]) {
+      const tr = make('tr');
+      tr.append(make('th', null, label), make('td', null, String(value)));
+      table.append(tr);
+    }
+    body.append(table);
+    const legend = make('div', 'fact-chips-legend');
+    for (const [k, label] of Object.entries(STATUS)) legend.append(make('span', `fact-chip ${k}`, label));
+    body.append(make('h3', 'stats-heading', 'Questions'), legend);
+    for (const f of V.practice.families) {
+      const labels = [...new Set(f.facts().map((spec) => V.task(spec).label))];
+      const block = make('div', 'fact-family');
+      const head = make('div', 'practice-name');
+      head.innerHTML = fracHTML(f.label);
+      const chips = make('div', 'fact-chips');
+      for (const label of labels) {
+        const status = M.factStatus(meta.facts[label]);
+        const chip = make('span', `fact-chip ${status}`);
+        chip.innerHTML = fracHTML(label);
+        chip.title = `${label}: ${STATUS[status]}`;
+        chips.append(chip);
+      }
+      block.append(head, chips);
+      body.append(block);
+    }
+  }
+  $('stats-btn').addEventListener('click', () => (renderStats(), openDialog('stats')));
+  $('stats-done').addEventListener('click', () => closeDialog('stats'));
+
   // ---------------------------------------------------------------- game state
 
   let game = null;
@@ -292,6 +530,8 @@ export function startGame(variantId) {
     const practice = settings.mode === 'practice';
     game = {
       practice,
+      multi: !practice && settings.mode === 'multi', // two players on one screen: just for fun, no points
+      streak: 0, // right first time in a row (you, or both players at home)
       level: settings.level,
       board: practice ? (V.practice.board ? V.practice.board() : null) : V.newBoard(settings.level),
       scores: [Fr.ZERO, Fr.ZERO],
@@ -350,11 +590,11 @@ export function startGame(variantId) {
     const p = game.player;
     el.turnPanel.style.setProperty('--turn-color', COLORS[p]);
     if (game.practice) return nextQuestion();
-    el.turnLabel.textContent = p === 0 ? 'Your turn' : 'CPU’s turn';
+    el.turnLabel.textContent = game.multi ? `${HOME_NAMES[p]}’s turn` : p === 0 ? 'Your turn' : 'CPU’s turn';
     renderDice(null);
     render();
     if (!game.pool.some((t) => B.fits(game.board, t.piece))) return gameOver();
-    if (p === 0) {
+    if (p === 0 || game.multi) {
       game.phase = 'roll';
       el.roll.hidden = false;
       el.roll.focus({ preventScroll: true });
@@ -538,6 +778,7 @@ export function startGame(variantId) {
 
   function timeUp() {
     const turn = game.turn;
+    turn.timedOut = true;
     turn.tries++;
     turn.firstTry = false;
     el.answer.classList.add('timeout');
@@ -590,10 +831,11 @@ export function startGame(variantId) {
     const correct = turn.correct;
     if (V.answerFirst) turn.rec.correct = correct;
     if (!game.practice) {
-      if (correct) game.scores[0] = Fr.add(game.scores[0], turn.points);
-      game.logs[0].push({ label: turn.task.label, correct });
+      if (correct) game.scores[game.player] = Fr.add(game.scores[game.player], turn.points);
+      game.logs[game.player].push({ label: turn.task.label, correct });
     } else game.asked++;
-    celebrate(turn);
+    const blockout = celebrate(turn);
+    reward(turn, correct, blockout);
     render();
     const wrongInGame = !correct && !game.practice;
     if (wrongInGame) showSteps(turn.steps);
@@ -608,15 +850,35 @@ export function startGame(variantId) {
     else showNext('Next', nextPlayer);
   }
 
-  // Filling (or emptying) a whole bar exactly
+  // Filling (or emptying) a whole bar exactly; true when it happened
   function celebrate(turn) {
     const b = game.board;
-    if (b.kind !== 'bars' || !turn.rec) return;
+    if (b.kind !== 'bars' || !turn.rec) return false;
     const bar = b.bars[turn.rec.bar];
     if ((b.mode === 'take' && bar.amount === 0) || (b.mode === 'fill' && bar.amount === b.units)) {
       el.msg.className = 'turn-msg blockout';
       el.msg.textContent = b.mode === 'take' ? 'Blockout! That bar is empty.' : 'Blockout! That bar is exactly 1 whole.';
+      return true;
     }
+    return false;
+  }
+
+  // Points, stats and achievements for your answer (not at home: those games are just for fun)
+  function reward(turn, correct, blockout) {
+    if (game.multi) return;
+    M.noteFact(meta, turn.task.label, { firstTry: Boolean(turn.firstTry), wrong: Math.max(0, turn.tries - (correct ? 1 : 0)), timeout: Boolean(turn.timedOut) });
+    if (correct) {
+      game.streak = turn.firstTry ? game.streak + 1 : 0;
+      meta.counters.correct++;
+      meta.counters.bestStreak = Math.max(meta.counters.bestStreak, game.streak);
+      const { points, bonus } = M.answerPoints({ firstTry: turn.firstTry, streak: game.streak, expert: game.expert });
+      M.addPoints(meta, points);
+      el.feedback.append(` +${points}`);
+      if (bonus.includes('streak')) toast(`🔥 ${game.streak} in a row!`, `+${game.expert ? 10 : 5} bonus points`);
+    } else game.streak = 0;
+    if (blockout) meta.counters.blockouts++;
+    celebrateAll(M.awardAchievements(meta, ACHIEVEMENTS, { event: 'answer', streak: game.streak, blockout }));
+    saveMeta();
   }
 
   function showNext(label, fn) {
@@ -727,6 +989,19 @@ export function startGame(variantId) {
       extra.append(chips);
     }
     $('over-again').textContent = 'Practice again';
+    // finishing bonus, counters, achievements
+    const perfect = game.firstTry === n;
+    const bonus = M.practiceFinishBonus(n, game.expert);
+    if (bonus) {
+      M.addPoints(meta, bonus);
+      toast(`🏁 Finished all ${n} questions!`, `+${bonus} bonus points`);
+    }
+    meta.counters.practiceRounds++;
+    if (perfect) meta.counters.perfectRounds++;
+    M.noteHistory(meta, { kind: 'practice', count: n, firstTry: game.firstTry, expert: game.expert });
+    celebrateAll(M.awardAchievements(meta, ACHIEVEMENTS, { event: 'practice', perfect, expert: game.expert }));
+    saveMeta();
+    if (perfect) confettiFullScreen();
     $('over').hidden = false;
   }
 
@@ -734,7 +1009,8 @@ export function startGame(variantId) {
     game.phase = 'over';
     const [me, cpu] = game.scores;
     const c = Fr.cmp(me, cpu);
-    $('over-title').textContent = c > 0 ? 'You win!' : c < 0 ? 'The CPU wins' : 'It’s a tie!';
+    const who = names();
+    $('over-title').textContent = c === 0 ? 'It’s a tie!' : game.multi ? `${who[c > 0 ? 0 : 1]} wins!` : c > 0 ? 'You win!' : 'The CPU wins';
     $('over-sub').textContent = game.board.kind === 'grid' && game.board.mode === 'clear' ? 'The board is clear.' : 'Nothing else fits.';
     const list = $('over-list');
     list.innerHTML = '';
@@ -742,11 +1018,28 @@ export function startGame(variantId) {
     game.scores.forEach((s, i) => {
       const li = make('li');
       li.style.setProperty('--c', COLORS[i]);
-      li.innerHTML = `<span>${NAMES[i]}</span><span class="result-pts">${fracHTML(fmtScore(s))} ${V.unit}</span><span class="result-bar"><span style="width:${(100 * s.n) / s.d / top}%"></span></span>`;
+      li.innerHTML = `<span>${who[i]}</span><span class="result-pts">${fracHTML(fmtScore(s))} ${V.unit}</span><span class="result-bar"><span style="width:${(100 * s.n) / s.d / top}%"></span></span>`;
       list.append(li);
     });
     $('over-extra').innerHTML = '';
     $('over-again').textContent = 'Play again';
+    if (game.multi) {
+      $('over-extra').append(make('p', 'setting-help', 'Home games are just for fun: no points or achievements.'));
+      if (c !== 0) confettiFullScreen();
+    } else {
+      const won = c > 0;
+      meta.counters.games++;
+      if (won) {
+        meta.counters.wins++;
+        const bonus = M.WIN_BONUS[game.level] || 0;
+        M.addPoints(meta, bonus);
+        toast(`🏆 You beat the CPU on ${V.levels[game.level].label}!`, `+${bonus} bonus points`);
+        confettiFullScreen();
+      }
+      M.noteHistory(meta, { kind: 'game', level: game.level, won });
+      celebrateAll(M.awardAchievements(meta, ACHIEVEMENTS, { event: 'game', won, level: game.level }));
+      saveMeta();
+    }
     $('over').hidden = false;
   }
 
@@ -855,7 +1148,7 @@ export function startGame(variantId) {
       const card = make('div', 'score-card' + (game.player === i ? ' active' : ''));
       card.style.setProperty('--c', COLORS[i]);
       const log = game.logs[i].slice(-8).map((l) => `<li class="${l.correct ? '' : 'miss'}">${fracHTML(l.label)}</li>`).join('');
-      card.innerHTML = `<div class="score-head"><span class="score-name">${NAMES[i]}</span><span class="score-pts">${fracHTML(fmtScore(s))} <small>${V.unit}</small></span></div><ul class="score-log">${log}</ul>`;
+      card.innerHTML = `<div class="score-head"><span class="score-name">${names()[i]}</span><span class="score-pts">${fracHTML(fmtScore(s))} <small>${V.unit}</small></span></div><ul class="score-log">${log}</ul>`;
       el.scores.append(card);
     });
   }

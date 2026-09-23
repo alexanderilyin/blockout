@@ -199,3 +199,15 @@
 }
 
 .board-wrap { -webkit-tap-highlight-color: transparent; }
+
+/* ---------- Shop, stats: question chips coloured by how well they're known ---------- */
+.fact-chips-legend, .fact-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fact-chips-legend { margin-bottom: 10px; }
+.fact-family { margin-bottom: 12px; }
+.fact-chip { padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; font-weight: 800; background: var(--soft-2); color: var(--ink); }
+.fact-chip.mastered { background: var(--good); color: #fff; }
+.fact-chip.learning { background: var(--learning); color: var(--learning-ink); }
+.fact-chip.practice { background: var(--danger); color: #fff; }
+.shop-owned { font-weight: 800; color: var(--good-ink); white-space: nowrap; }
+#shop-list .shop-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; margin-bottom: 6px; }
+#shop-list .shop-text { display: flex; flex-direction: column; gap: 2px; text-align: left; }

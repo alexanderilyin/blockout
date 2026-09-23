@@ -63,9 +63,24 @@ Tap **👤 Sign in** at the top of the menu. A student's progress then follows t
 
 ## More games
 
-**More games** on the main menu leads to the same roll, place and answer game for other operations: addition, subtraction, division, and adding, subtracting, multiplying and dividing fractions. Each has Single player and Practice.
+**More games** on the main menu leads to the same roll, place and answer game for other operations: addition, subtraction, division, and adding, subtracting, multiplying and dividing fractions. Each keeps its own maths explanations ("Show me how", and the CPU's working).
 
 ![The More games page](../assets/screenshots/more-games.png)
+
+Each game has:
+
+- **Single player**, **Home** (two players on one screen) and **Practice** (Learn, or Expert: a timer, no help and double points)
+- **Points** for right answers (more for right first time and streaks), wins and finished practice rounds, in the game's own wallet
+- **A shop** with its own unlock chains: Medium, then Hard; 20-question practice rounds, then Expert; Home multiplayer
+- **Achievements** with the same banners as the main game, and **Stats** with every question coloured by how well it's known
+
+![A game's menu: its wallet, three modes, and locked Medium and Hard](../assets/screenshots/other-game-menu.png)
+
+![The shop: the next step of each chain, with its price](../assets/screenshots/other-game-shop.png)
+
+![A win: the scores, a bonus toast and an achievement banner](../assets/screenshots/other-game-win.png)
+
+![Stats: totals and every question by how well it's known](../assets/screenshots/other-game-stats.png)
 
 ![Adding fractions: pieces go into fraction bars](../assets/screenshots/fraction-game.png)
 

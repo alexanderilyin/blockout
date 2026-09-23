@@ -6,13 +6,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./meta": "./src/meta.js",
     "./style.css": "./src/style.css"
   },
   "dependencies": {
     "@blockout/engine": "*",
-    "@blockout/ui": "*"
+    "@blockout/ui": "*",
+    "@blockout/progress": "*"
   },
   "scripts": {
-    "lint": "eslint src"
+    "test": "node --test",
+    "lint": "eslint src test"
   }
 }

@@ -8,7 +8,8 @@
     ".": "./src/index.js",
     "./vite": "./src/vite-plugin.js",
     "./css/*": "./src/css/*",
-    "./icons.svg": "./src/icons.svg"
+    "./icons.svg": "./src/icons.svg",
+    "./rewards": "./src/rewards.js"
   },
   "scripts": {
     "lint": "eslint src"
