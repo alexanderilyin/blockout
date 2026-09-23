@@ -17,6 +17,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const Rooms = require('./rooms.js');
+const Moderation = require('./moderation.js');
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -25,10 +26,17 @@ const flag = (name) => {
 };
 const PORT = Number(args.find((a) => /^\d+$/.test(a)) || process.env.PORT || 8080);
 // The address students should use, when it isn't this computer's own (tunnels, proxies).
+// Names are also checked with OpenAI's free moderation model when this is set
+// (and only then are names sent to OpenAI). The word list always runs.
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const PUBLIC_URL = (flag('--public-url') || process.env.PUBLIC_URL || '').replace(/\/*$/, '/').replace(/^\/$/, '');
 const ROOT = path.resolve(__dirname, '..');
 const ROOM_IDLE_MS = 4 * 60 * 60 * 1000; // forget a class after 4 hours without activity
 const AUTO_NEXT_MS = 2500; // pause after everyone is done, so the class sees the last answers land
+const CPU_ROLL_MS = 1500; // pairs: the CPU's turn, slow enough to watch
+const CPU_PLACE_MS = 2200;
+const CPU_SPEED = { slow: 1.6, normal: 1, fast: 0.4 }; // the teacher's "CPU speed" setting
+const ROUND_PAUSE_MS = 5000; // tournaments: time to see your result before the next round
 const HEARTBEAT_MS = 25000;
 const POLL_HOLD_MS = 25000; // a long poll waits this long for a change before answering anyway
 const CLOSED_MEMORY_MS = 30 * 60 * 1000; // pollers of a closed class are told so for this long
@@ -106,8 +114,51 @@ function broadcast(room) {
       room.version = (room.version || 0) + 1;
       for (const s of streams.get(room.code) || []) pushView(room, s);
       for (const w of pollers.get(room.code) || []) answerPoll(room, w);
+      scheduleCpu(room);
+      scheduleRound(room);
     }, 60)
   );
+}
+
+// Tournaments: when a round is done (or a king-of-the-hill match), start the next
+// one after a pause, by itself if the teacher left "auto" on (king of the hill always).
+const roundTimers = new Map(); // code -> timeout
+function scheduleRound(room) {
+  if (room.type !== 'tournament' || !room.roundReady || room.state !== 'playing' || roundTimers.has(room.code)) return;
+  if (!room.autoNext && room.tournament.format !== 'koth') return; // waits for "Next round"
+  roundTimers.set(
+    room.code,
+    setTimeout(() => {
+      roundTimers.delete(room.code);
+      if (!rooms.has(room.code) || !room.roundReady || room.state !== 'playing') return;
+      Rooms.advanceTournament(room);
+      broadcast(room);
+    }, ROUND_PAUSE_MS)
+  );
+}
+
+// Pairs: the CPU (playing an odd one out) rolls, then places, on its own.
+const cpuTimers = new Map(); // `${code}:${match}` -> timeout
+function scheduleCpu(room) {
+  if (room.type !== 'pairs') return;
+  for (const m of room.matches) {
+    const key = `${room.code}:${m.id}`;
+    if (!Rooms.cpuToMove(room, m) || cpuTimers.has(key)) continue;
+    const turn = m.turn;
+    cpuTimers.set(
+      key,
+      setTimeout(
+        () => {
+          cpuTimers.delete(key);
+          if (!rooms.has(room.code) || !Rooms.cpuToMove(room, m) || m.turn !== turn) return;
+          if (m.roll) Rooms.cpuPlace(room, m);
+          else Rooms.cpuRoll(room, m);
+          broadcast(room);
+        },
+        (m.roll ? CPU_PLACE_MS : CPU_ROLL_MS) * CPU_SPEED[room.settings.cpuSpeed]
+      )
+    );
+  }
 }
 
 function pushView(room, s) {
@@ -203,7 +254,7 @@ function cancelAutoNext(room) {
 }
 
 function maybeAutoNext(room) {
-  if (!room.autoNext || !Rooms.allDone(room) || autoTimers.has(room.code)) return;
+  if (room.type !== 'class' || !room.autoNext || !Rooms.allDone(room) || autoTimers.has(room.code)) return;
   const round = room.round;
   autoTimers.set(
     room.code,
@@ -251,12 +302,39 @@ const routes = {
     return { code: room.code, teacherKey: room.teacherKey, lan: lanUrls() };
   },
 
+  // Students send { name }. The teacher can join as a player (pairs: to play the
+  // odd one out) with { teacher: KEY } from the projector screen or { play: KEY }
+  // from another device.
   'POST /api/rooms/:code/join': async (req, code) => {
     const room = getRoom(code);
     const body = await readJson(req);
-    const p = Rooms.join(room, body.name);
+    let p;
+    if (body.teacher || body.play) {
+      if (body.teacher !== room.teacherKey && body.play !== room.playKey) throw new Rooms.RoomError('teacher', 'That teacher link isn’t right.');
+      p = Rooms.joinTeacher(room);
+    } else {
+      const check = await Moderation.checkName(body.name, { apiKey: OPENAI_API_KEY });
+      if (!check.ok) throw new Rooms.RoomError('name', 'Please use your real first name.');
+      p = Rooms.join(room, body.name);
+    }
     broadcast(room);
-    return { id: p.id, key: p.key, name: p.name };
+    return { id: p.id, key: p.key, name: p.name, teacher: Boolean(p.isTeacher) };
+  },
+
+  // Does this class exist? (A join link checks before asking for a name.)
+  'GET /api/rooms/:code/info': async (req, code) => {
+    const room = getRoom(code);
+    return { code: room.code, type: room.type, state: room.state };
+  },
+
+  // Pairs: roll for your turn.
+  'POST /api/rooms/:code/roll': async (req, code) => {
+    const room = getRoom(code);
+    const body = await readJson(req);
+    const p = Rooms.findPlayer(room, body.id, body.key);
+    const result = Rooms.pairRoll(room, p);
+    broadcast(room);
+    return result;
   },
 
   'POST /api/rooms/:code/leave': async (req, code) => {
@@ -287,13 +365,23 @@ const routes = {
       case 'settings':
         Rooms.setSettings(room, body.settings || {});
         break;
+      case 'pairOptions':
+        Rooms.setPairOptions(room, body.options || {});
+        break;
+      case 'swap':
+        Rooms.swapOrder(room, body.a, body.b);
+        break;
       case 'start':
         cancelAutoNext(room);
         Rooms.start(room);
         break;
       case 'next':
         cancelAutoNext(room);
-        Rooms.nextRound(room);
+        if (room.type === 'tournament') {
+          clearTimeout(roundTimers.get(room.code));
+          roundTimers.delete(room.code);
+          if (room.roundReady) Rooms.advanceTournament(room);
+        } else Rooms.nextRound(room);
         break;
       case 'autoNext':
         room.autoNext = Boolean(body.on);
@@ -324,6 +412,13 @@ const routes = {
         streams.delete(room.code);
         pollers.delete(room.code);
         closedRooms.set(room.code, Date.now());
+        clearTimeout(roundTimers.get(room.code));
+        roundTimers.delete(room.code);
+        for (const [key, t] of cpuTimers) {
+          if (!key.startsWith(`${room.code}:`)) continue;
+          clearTimeout(t);
+          cpuTimers.delete(key);
+        }
         return { ok: true };
       default:
         throw new Rooms.RoomError('action', 'Unknown action.');
@@ -396,6 +491,7 @@ if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Blockout classroom server on http://localhost:${PORT}/`);
     for (const url of lanUrls()) console.log(url === PUBLIC_URL ? `  Students join at: ${url}` : `  Chromebooks on this network: ${url}`);
+    console.log(`  Name check: word list${OPENAI_API_KEY ? ' + OpenAI moderation' : ' (set OPENAI_API_KEY to add OpenAI moderation)'}`);
   });
 }
 

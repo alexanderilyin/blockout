@@ -90,17 +90,47 @@
       </div>
 
       <form id="setup-form" autocomplete="off">
+        <div class="field" id="difficulty-field">
+          <span>Difficulty</span>
+          <div class="segmented" data-setting="difficulty">
+            <button type="button" data-value="easy">Easy <small>6-sided dice</small></button>
+            <button type="button" data-value="medium">Medium <small>8-sided dice</small></button>
+            <button type="button" data-value="hard">Hard <small>12-sided dice</small></button>
+            <button type="button" data-value="tricky">Tricky <small>no easy facts</small></button>
+            <button type="button" data-value="master">Master <small>your weak facts</small></button>
+            <button type="button" data-value="legend">Legend <small>teens × 2–9</small></button>
+          </div>
+        </div>
+
         <div id="single-setup" class="setup-section">
           <!-- Hidden: single player and practice play as "You" (stats and times table are saved under that name) -->
           <label class="field" hidden>
             <span>Your name</span>
             <input type="text" id="single-name" maxlength="14" value="You" />
           </label>
+          <div class="field">
+            <span>Level</span>
+            <div class="segmented" id="game-level">
+              <button type="button" data-level="learn" class="selected">🌱 Learn</button>
+              <button type="button" data-level="expert">🧠 Expert</button>
+            </div>
+            <p class="setting-help" id="game-level-help"></p>
+          </div>
+          <div class="field" id="game-timer-field" hidden>
+            <span>Timer</span>
+            <div class="segmented" id="game-timer">
+              <button type="button" data-secs="0" class="selected">No timer</button>
+              <button type="button" data-secs="30">30 s</button>
+              <button type="button" data-secs="10">10 s</button>
+              <button type="button" data-secs="5">5 s</button>
+            </div>
+            <p class="setting-help" id="game-timer-help"></p>
+          </div>
         </div>
 
         <div id="multi-setup" class="setup-section" hidden>
           <div class="segmented" id="multi-kind" role="radiogroup" aria-label="Where you're playing">
-            <button type="button" data-kind="local" class="selected" role="radio" aria-checked="true"><svg class="icon" aria-hidden="true"><use href="#i-house"></use></svg> Local <small>2–4 on one screen</small></button>
+            <button type="button" data-kind="local" class="selected" role="radio" aria-checked="true"><svg class="icon" aria-hidden="true"><use href="#i-house"></use></svg> Home <small>2–4 on one screen</small></button>
             <button type="button" data-kind="classroom" role="radio" aria-checked="false"><svg class="icon" aria-hidden="true"><use href="#i-school"></use></svg> Classroom <small>Whole class, own devices</small></button>
           </div>
           <div id="local-setup" class="setup-section">
@@ -116,7 +146,7 @@
             <p class="invite-error" id="names-error" role="alert" hidden>Every player needs a name.</p>
           </div>
           <div id="classroom-setup" class="setup-section" hidden>
-            <p class="setting-help">Everyone plays the same rolls on their own board. The teacher’s screen shows the dice and the leaderboard.</p>
+            <p class="setting-help">Play as a whole class or in pairs. The teacher’s screen shows the join code, the dice and the scores.</p>
             <div class="classroom-actions">
               <button type="button" class="btn btn-primary btn-big" id="class-join-open">Join a class</button>
               <button type="button" class="btn" id="class-host-open"><svg class="icon" aria-hidden="true"><use href="#i-school"></use></svg> Host a class (teacher)</button>
@@ -132,13 +162,6 @@
             <input type="text" id="practice-name" maxlength="14" value="You" />
           </label>
           <div class="field">
-            <span>Questions</span>
-            <div class="segmented" id="practice-count">
-              <button type="button" data-count="10" class="selected">10</button>
-              <button type="button" data-count="20">20</button>
-            </div>
-          </div>
-          <div class="field">
             <span>Level</span>
             <div class="segmented" id="practice-level">
               <button type="button" data-level="learn" class="selected">🌱 Learn</button>
@@ -146,10 +169,29 @@
             </div>
             <p class="setting-help" id="practice-level-help">Learn: see each fact as a rectangle and get help counting.</p>
           </div>
+          <div class="field" id="practice-timer-field" hidden>
+            <span>Timer</span>
+            <div class="segmented" id="practice-timer">
+              <button type="button" data-secs="0" class="selected">No timer</button>
+              <button type="button" data-secs="30">30 s</button>
+              <button type="button" data-secs="10">10 s</button>
+              <button type="button" data-secs="5">5 s</button>
+            </div>
+            <p class="setting-help" id="practice-timer-help">Expert only: answer before the clock runs out, or it counts as missed.</p>
+          </div>
+          <div class="field">
+            <span>Questions</span>
+            <div class="segmented" id="practice-count">
+              <button type="button" data-count="5" class="selected">5</button>
+              <button type="button" data-count="10">10</button>
+              <button type="button" data-count="20">20</button>
+            </div>
+            <p class="setting-help" id="practice-count-help"></p>
+          </div>
           <div class="field">
             <span>Times tables to practice</span>
             <div class="table-chips" id="practice-tables" role="group" aria-label="Times tables to practice"></div>
-            <p class="setting-help">Pick as many as you like. None picked: questions come from your whole times table, focusing on the facts you find hardest.</p>
+            <p class="setting-help">Unlock tables one at a time, then pick as many as you like. None picked: questions come from all your unlocked tables, focusing on the facts you find hardest.</p>
           </div>
           <p class="practice-preview" id="practice-preview"></p>
         </div>
@@ -157,9 +199,13 @@
         <div class="field" id="board-size-field">
           <span>Board size</span>
           <div class="segmented" id="board-size">
-            <button type="button" data-size="12" class="selected">12×12</button>
+            <button type="button" data-size="6" class="selected">6×6</button>
+            <button type="button" data-size="8">8×8</button>
+            <button type="button" data-size="10">10×10</button>
+            <button type="button" data-size="12">12×12</button>
             <button type="button" data-size="16">16×16</button>
             <button type="button" data-size="20">20×20</button>
+            <button type="button" data-size="24">24×24</button>
             <button type="button" data-size="custom">Custom</button>
           </div>
           <div class="custom-size" id="custom-size" hidden>
@@ -169,15 +215,7 @@
             <button type="button" class="btn btn-small step" data-step="1" aria-label="Bigger board">+</button>
             <span class="custom-hint">6 to 30</span>
           </div>
-        </div>
-
-        <div class="field" id="difficulty-field">
-          <span>Difficulty</span>
-          <div class="segmented" data-setting="difficulty">
-            <button type="button" data-value="easy">Easy <small>6-sided dice</small></button>
-            <button type="button" data-value="medium">Medium <small>8-sided dice</small></button>
-            <button type="button" data-value="hard">Hard <small>12-sided dice</small></button>
-          </div>
+          <p class="setting-help" id="board-size-help"></p>
         </div>
 
         <button type="submit" class="btn btn-primary btn-big" id="start-btn">Start game</button>
@@ -212,22 +250,66 @@
             <div class="host-join-text">
               <p class="host-step">1. Go to</p>
               <p class="host-url" id="host-url"></p>
+              <div class="host-share">
+                <button type="button" class="btn btn-small" id="host-copy-link"><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg> Copy link</button>
+                <button type="button" class="btn btn-small" id="host-copy-msg"><svg class="icon" aria-hidden="true"><use href="#i-mail"></use></svg> Copy message</button>
+                <button type="button" class="btn btn-small" id="host-share-btn" hidden><svg class="icon" aria-hidden="true"><use href="#i-link"></use></svg> Share</button>
+              </div>
               <p class="host-step">2. Enter the code</p>
               <p class="host-code" id="host-code"></p>
             </div>
           </div>
-          <p class="host-settings"><span id="host-settings"></span> <button type="button" class="link-btn" id="host-change">Change</button></p>
           <button type="button" class="btn btn-primary btn-big" id="host-start-btn">Start game</button>
           <p class="setting-help" id="host-local-help" hidden>This screen is on <strong>localhost</strong>, which other computers can’t open. Chromebooks should use this computer’s network address instead (shown above when the server finds one).</p>
+          <section class="host-game-settings" aria-labelledby="host-game-settings-title">
+            <div class="host-settings-head">
+              <h3 class="stats-heading" id="host-game-settings-title">Game settings</h3>
+              <button type="button" class="btn btn-small" id="host-quick"><svg class="icon" aria-hidden="true"><use href="#i-zap"></use></svg> Make it quick</button>
+            </div>
+            <p class="setting-help">For everyone in the class, no unlocks needed.</p>
+            <div class="host-settings-grid" id="host-settings-grid"></div>
+          </section>
+          <div class="host-pairs" id="host-pairs" hidden>
+            <div class="field">
+              <span>Pairs</span>
+              <div class="segmented" id="host-matching">
+                <button type="button" data-value="shuffle">New random pairs</button>
+                <button type="button" data-value="keep">Keep pairs</button>
+                <button type="button" data-value="arrange">I’ll arrange them</button>
+              </div>
+            </div>
+            <div class="field">
+              <span>With an odd number, the odd one out plays</span>
+              <div class="segmented" id="host-odd">
+                <button type="button" data-value="screen">You <small>on this screen</small></button>
+                <button type="button" data-value="device">You <small>on another device</small></button>
+                <button type="button" data-value="cpu">The CPU <small>by itself</small></button>
+              </div>
+            </div>
+            <p class="setting-help" id="host-pairs-help"></p>
+            <ol class="host-pair-list" id="host-pair-list"></ol>
+            <div class="host-teacher-device" id="host-teacher-device" hidden>
+              <canvas id="host-teacher-qr" class="host-qr small" aria-label="QR code for your other device"></canvas>
+              <div>
+                <p class="host-step">Open this on your other device to play:</p>
+                <p class="host-teacher-url" id="host-teacher-url"></p>
+                <button type="button" class="btn btn-small" id="host-copy-teacher"><svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg> Copy link</button>
+                <p class="host-teacher-status" id="host-teacher-status"></p>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="host-play" class="host-panel" hidden>
           <p class="host-kicker" id="host-round"></p>
-          <div class="dice host-dice">
+          <button type="button" class="btn btn-primary host-mygame" id="host-mygame-btn" hidden></button>
+          <div class="host-tournament" id="host-tournament" hidden></div>
+          <ol class="host-matches" id="host-matches" hidden></ol>
+          <div class="dice host-dice" id="host-dice">
             <div class="die" id="host-die-a"></div>
             <div class="die" id="host-die-b"></div>
           </div>
           <p class="host-roll-text" id="host-roll-text"></p>
-          <div class="host-progress">
+          <div class="host-progress" id="host-progress">
             <div class="progress-bar"><span id="host-done-fill"></span></div>
             <span id="host-done-text"></span>
           </div>
@@ -235,11 +317,13 @@
             <button type="button" class="btn btn-primary" id="host-next-btn"><svg class="icon" aria-hidden="true"><use href="#i-dices"></use></svg> Next roll</button>
             <button type="button" class="btn" id="host-end-btn"><svg class="icon" aria-hidden="true"><use href="#i-flag"></use></svg> End game</button>
           </div>
-          <label class="host-auto"><input type="checkbox" id="host-auto" checked /> Roll again by itself when everyone’s done</label>
+          <label class="host-auto" id="host-auto-label"><input type="checkbox" id="host-auto" checked /> Roll again by itself when everyone’s done</label>
         </div>
         <div id="host-ended" class="host-panel" hidden>
           <p class="host-kicker">Class results</p>
           <ol class="podium" id="host-podium"></ol>
+          <ol class="host-matches ended" id="host-match-results" hidden></ol>
+          <div class="host-tournament" id="host-tournament-final" hidden></div>
           <div class="tiles" id="host-report"></div>
           <h3 class="stats-heading">Facts the class found hardest</h3>
           <ol class="host-hardest" id="host-hardest"></ol>
@@ -388,12 +472,11 @@
     <div class="dialog results-dialog" role="dialog" aria-modal="true" aria-labelledby="pd-title">
       <h2 id="pd-title">Practice done! 🎯</h2>
       <p class="result-sub" id="pd-sub"></p>
-      <div class="rewards" id="pd-rewards"></div>
-      <button type="button" class="btn btn-small details-btn" id="pd-details-btn" aria-controls="pd-body" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-chart-column"></use></svg> Show details</button>
       <div id="pd-body" class="stats" hidden></div>
-      <div class="dialog-actions">
+      <div class="dialog-actions results-actions">
         <button type="button" class="btn btn-primary" id="pd-again">Practice again</button>
         <button type="button" class="btn" id="pd-menu">Main menu</button>
+        <button type="button" class="btn details-btn" id="pd-details-btn" aria-controls="pd-body" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-chart-column"></use></svg> Show details</button>
         <div class="nudges">
           <button type="button" class="btn nudge" id="pd-shop-btn" hidden></button>
           <button type="button" class="btn nudge" id="pd-wardrobe-btn" hidden></button>
@@ -517,14 +600,14 @@
       </div>
 
       <div class="setting">
-        <div class="setting-label">Answer timer</div>
+        <div class="setting-label">Answer timer (Home multiplayer)</div>
         <div class="segmented" data-setting="answerTime">
           <button type="button" data-value="0">Off</button>
           <button type="button" data-value="30">30 s</button>
           <button type="button" data-value="10">10 s</button>
           <button type="button" data-value="5">5 s</button>
         </div>
-        <p class="setting-help">Time to answer the multiplication. Run out and you lose your turn: the rectangle comes off the board and scores nothing. The clock pauses during "Help me count".</p>
+        <p class="setting-help">Time to answer the multiplication in Home multiplayer games. Run out and you lose your turn: the rectangle comes off the board and scores nothing. The clock pauses during "Help me count". (Single player has its own timers under Expert.)</p>
       </div>
 
       <div class="setting">
@@ -616,9 +699,9 @@
         <textarea id="invite-note" maxlength="140" rows="2" placeholder="e.g. Practice your 7s and try to beat the CPU!"></textarea>
       </label>
       <div class="invite-grid">
-        <label class="field"><span>Board</span><select id="invite-board"><option value="12">12×12</option><option value="16">16×16</option><option value="20">20×20</option><option value="custom">Custom…</option></select></label>
+        <label class="field"><span>Board</span><select id="invite-board"><option value="6">6×6</option><option value="8">8×8</option><option value="10">10×10</option><option value="12" selected>12×12</option><option value="16">16×16</option><option value="20">20×20</option><option value="24">24×24</option><option value="custom">Custom…</option></select></label>
         <label class="field" id="invite-custom-field" hidden><span>Board size (6–30)</span><input type="number" id="invite-custom" min="6" max="30" value="14" inputmode="numeric" /></label>
-        <label class="field"><span>Difficulty</span><select id="invite-difficulty"><option value="easy">Easy (6-sided)</option><option value="medium">Medium (8-sided)</option><option value="hard">Hard (12-sided)</option></select></label>
+        <label class="field"><span>Difficulty</span><select id="invite-difficulty"><option value="easy">Easy (6-sided)</option><option value="medium">Medium (8-sided)</option><option value="hard">Hard (12-sided)</option><option value="tricky">Tricky (no easy facts)</option><option value="master">Master (weak facts)</option><option value="legend">Legend (teens × 2–9)</option></select></label>
         <label class="field"><span>Placing</span><select id="invite-placeMode"><option value="draw">Draw it</option><option value="click">Click to place</option><option value="auto">Auto</option></select></label>
         <label class="field"><span>Answer timer</span><select id="invite-answerTime"><option value="0">Off</option><option value="30">30 s</option><option value="10">10 s</option><option value="5">5 s</option></select></label>
         <label class="field"><span>Dice</span><select id="invite-diceMode"><option value="virtual">Roll in the app</option><option value="real">Real dice</option></select></label>
@@ -770,18 +853,31 @@
   <div class="overlay" id="class-host-setup" hidden>
     <div class="dialog class-dialog" role="dialog" aria-modal="true" aria-labelledby="class-host-title">
       <h2 id="class-host-title">Host a class</h2>
-      <p class="setting-help">Everyone plays the same rolls on their own board. Put your screen on the projector: it shows the join code, the dice and the leaderboard.</p>
+      <p class="setting-help">Put your screen on the projector: it shows the join code, the dice and the scores.</p>
+      <div class="field" id="host-type-field">
+        <span>Game type</span>
+        <div class="segmented" id="host-type" role="radiogroup" aria-label="Game type">
+          <button type="button" data-value="class" class="selected" role="radio" aria-checked="true"><svg class="icon" aria-hidden="true"><use href="#i-school"></use></svg> Whole class <small>One leaderboard</small></button>
+          <button type="button" data-value="pairs" role="radio" aria-checked="false"><svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg> Pairs <small>Head to head in twos</small></button>
+          <button type="button" data-value="tournament" role="radio" aria-checked="false"><svg class="icon" aria-hidden="true"><use href="#i-trophy"></use></svg> Tournament <small>Brackets and champions</small></button>
+        </div>
+        <p class="setting-help" id="host-type-help"></p>
+      </div>
       <div class="field">
         <span>Board size</span>
         <div class="segmented" id="host-size">
+          <button type="button" data-value="6">6×6</button>
+          <button type="button" data-value="8">8×8</button>
+          <button type="button" data-value="10">10×10</button>
           <button type="button" data-value="12" class="selected">12×12</button>
           <button type="button" data-value="16">16×16</button>
           <button type="button" data-value="20">20×20</button>
+          <button type="button" data-value="24">24×24</button>
         </div>
       </div>
       <div class="field">
         <span>Difficulty</span>
-        <div class="segmented" id="host-difficulty" data-setting="difficulty">
+        <div class="segmented" id="host-difficulty">
           <button type="button" data-value="easy" class="selected">Easy <small>6-sided dice</small></button>
           <button type="button" data-value="medium">Medium <small>8-sided dice</small></button>
           <button type="button" data-value="hard">Hard <small>12-sided dice</small></button>
@@ -803,17 +899,34 @@
     </div>
   </div>
 
+  <!-- Cheat codes: press ~ -->
+  <div class="overlay" id="cheats" hidden>
+    <div class="dialog cheats-dialog" role="dialog" aria-modal="true" aria-labelledby="cheats-title">
+      <h2 id="cheats-title">🕹️ Cheat codes</h2>
+      <form id="cheats-form" autocomplete="off">
+        <input type="password" id="cheats-input" class="cheats-input" spellcheck="false" autocapitalize="off" placeholder="Type a code" aria-label="Cheat code" />
+        <p class="cheats-msg" id="cheats-msg" aria-live="polite"></p>
+        <div class="cheats-active" id="cheats-active" hidden></div>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="cheats-close">Close</button>
+          <button type="submit" class="btn btn-primary">Enter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="overlay" id="game-over" hidden>
     <div class="dialog results-dialog" role="dialog" aria-modal="true" aria-labelledby="result-title">
       <h2 id="result-title"></h2>
       <p id="result-sub" class="result-sub"></p>
       <ol id="result-list" class="result-list"></ol>
+      <p class="result-tournament" id="result-tournament" hidden></p>
       <div id="rewards" class="rewards"></div>
-      <button type="button" class="btn btn-small details-btn" id="details-btn" aria-controls="stats" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-chart-column"></use></svg> Show details</button>
       <div id="stats" class="stats" hidden></div>
-      <div class="dialog-actions">
+      <div class="dialog-actions results-actions">
         <button type="button" class="btn btn-primary" id="again-btn">Play again</button>
         <button type="button" class="btn" id="to-menu-btn">Main menu</button>
+        <button type="button" class="btn details-btn" id="details-btn" aria-controls="stats" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#i-chart-column"></use></svg> Show details</button>
         <div class="nudges">
           <button type="button" class="btn nudge" id="results-shop-btn" hidden></button>
           <button type="button" class="btn nudge" id="results-wardrobe-btn" hidden></button>

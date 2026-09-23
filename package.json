@@ -1,0 +1,14 @@
+{
+  "name": "blockout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blockout: a multiplication game. The game has no dependencies; these are for development and testing.",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "classroom": "node server/classroom.js 8080"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "playwright": "^1.63.0"
+  }
+}

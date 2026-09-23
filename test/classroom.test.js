@@ -19,7 +19,28 @@ function placeFor(room, player) {
 test('codes are four easy-to-read letters; settings are cleaned', () => {
   const room = Rooms.createRoom({ size: 99, difficulty: 'hard', rounds: 10 });
   assert.match(room.code, /^[A-HJ-NP-Z]{4}$/);
-  assert.deepEqual(room.settings, { size: 12, difficulty: 'hard', rounds: 10 });
+  assert.deepEqual(room.settings, {
+    size: 12,
+    difficulty: 'hard',
+    rounds: 10,
+    placeMode: 'choice',
+    answerTime: 0,
+    autoRoll: false,
+    fitRolls: 'end',
+    cpuSpeed: 'normal',
+    format: 'knockout',
+    matchTurns: 0,
+    swissRounds: 3,
+    kothMatches: 10,
+  });
+  Rooms.setSettings(room, { placeMode: 'auto', answerTime: 20, autoRoll: true, fitRolls: 'always', cpuSpeed: 'fast' });
+  assert.equal(room.settings.placeMode, 'auto');
+  assert.equal(room.settings.answerTime, 20);
+  assert.equal(room.settings.autoRoll, true);
+  Rooms.setSettings(room, { answerTime: 7, placeMode: 'teleport' }); // not allowed: back to the defaults
+  assert.equal(room.settings.answerTime, 0);
+  assert.equal(room.settings.placeMode, 'choice');
+  assert.equal(room.settings.difficulty, 'hard'); // untouched
   assert.equal(room.state, 'lobby');
 });
 
@@ -54,7 +75,7 @@ test('the server checks rectangles: right size, on the board, not overlapping', 
   const [a, b] = room.roll;
   const p = players[0];
   assert.throws(() => Rooms.submit(room, p, { round: 1, kind: 'placed', rect: { x: 0, y: 0, w: a + 1, h: b } }), { code: 'rect' });
-  assert.throws(() => Rooms.submit(room, p, { round: 1, kind: 'placed', rect: { x: 11, y: 11, w: a, h: b } }), a * b > 1 ? { code: 'rect' } : undefined);
+  assert.throws(() => Rooms.submit(room, p, { round: 1, kind: 'placed', rect: { x: 12, y: 0, w: a, h: b } }), { code: 'rect' }); // off the board
   assert.throws(() => Rooms.submit(room, p, { round: 2, kind: 'timeout' }), { code: 'stale' });
   assert.throws(() => Rooms.submit(room, p, { round: 1, kind: 'pass' }), { code: 'fits' });
   Rooms.submit(room, p, { round: 1, kind: 'placed', rect: { x: 0, y: 0, w: b, h: a } }); // either way round
@@ -118,11 +139,246 @@ test('back to the lobby clears boards and scores but keeps the class', () => {
   assert.equal(room.game, 2);
 });
 
-test('joining mid-game waits for the next roll', () => {
-  const { room } = classOf(['Ann']);
+test('joining mid-game: in the class, but out of this game until the next one', () => {
+  const { room, players } = classOf(['Ann']);
   Rooms.start(room);
-  const late = Rooms.join(room, 'Zed');
-  assert.equal(late.done, true);
+  const late = Object.assign(Rooms.join(room, 'Zed'), { connections: 1 });
+  assert.equal(late.benched, true);
+  assert.throws(() => Rooms.submit(room, late, { round: 1, kind: 'timeout' }), { code: 'benched' });
+  Rooms.submit(room, players[0], placeFor(room, players[0]));
+  assert.equal(Rooms.allDone(room), true); // nobody waits for Zed
   Rooms.nextRound(room);
   assert.equal(late.missed, 0);
+  assert.equal(late.done, false); // not dealt this game's rolls
+  assert.deepEqual(Rooms.leaderboard(room).map((p) => p.name), ['Ann']);
+  assert.deepEqual(Rooms.teacherView(room).waiting.map((p) => p.name), ['Zed']);
+  assert.equal(Rooms.studentView(room, late).you.benched, true);
+  Rooms.end(room);
+  Rooms.backToLobby(room);
+  Rooms.start(room);
+  assert.equal(late.benched, false);
+  assert.equal(Rooms.leaderboard(room).length, 2);
+});
+
+test('pairs: joining mid-game waits for the next game', () => {
+  const { room } = pairsOf(['Ann', 'Bo']);
+  Rooms.start(room);
+  const late = Rooms.join(room, 'Zed');
+  assert.equal(late.benched, true);
+  assert.equal(Rooms.studentView(room, late).match, null);
+  Rooms.end(room);
+  Rooms.backToLobby(room);
+  Rooms.start(room);
+  assert.ok(Rooms.matchOf(room, late));
+});
+
+// ---------------------------------------------------------------- pairs
+
+function pairsOf(names, opts = {}) {
+  const room = Rooms.createRoom({ type: 'pairs' }, { rng: () => 0.3 });
+  Rooms.setPairOptions(room, opts);
+  const players = names.map((n) => Object.assign(Rooms.join(room, n), { connections: 1 }));
+  return { room, players };
+}
+
+// Play whoever's turn it is in match m: roll, then place the first spot that fits.
+function playTurn(room, m, rng = Math.random) {
+  const p = room.players.find((x) => x.id === m.ids[m.current]);
+  if (p.isCpu) {
+    const r = Rooms.cpuRoll(room, m, rng);
+    if (!r.passed) Rooms.cpuPlace(room, m);
+    return;
+  }
+  const { roll, passed } = Rooms.pairRoll(room, p, rng);
+  if (passed) return;
+  const [move] = Core.validPlacements(m.board, ...roll);
+  Rooms.submit(room, p, { round: m.turn, kind: 'placed', rect: { x: move.x, y: move.y, w: move.w, h: move.h }, firstTry: true, ms: 6000 });
+}
+
+test('pairs: students are matched in twos, each pair on its own shared board', () => {
+  const { room, players } = pairsOf(['Ann', 'Bo', 'Cy', 'Di']);
+  assert.equal(room.type, 'pairs');
+  Rooms.start(room);
+  assert.equal(room.matches.length, 2);
+  const ids = room.matches.flatMap((m) => m.ids).sort();
+  assert.deepEqual(ids, players.map((p) => p.id).sort());
+  for (const p of players) assert.ok(p.match);
+});
+
+test('pairs: turns alternate on the shared board; only the current player may roll', () => {
+  const { room } = pairsOf(['Ann', 'Bo']);
+  Rooms.start(room);
+  const m = room.matches[0];
+  const [first, second] = m.ids.map((id) => room.players.find((p) => p.id === id));
+  assert.throws(() => Rooms.pairRoll(room, second), { code: 'turn' });
+  playTurn(room, m);
+  assert.equal(m.current, 1);
+  assert.equal(m.turn, 2);
+  assert.ok(first.score > 0);
+  assert.throws(() => Rooms.pairRoll(room, first), { code: 'turn' });
+  const { roll } = Rooms.pairRoll(room, second);
+  // rolling again just shows the same roll
+  assert.deepEqual(Rooms.pairRoll(room, second).roll, roll);
+  // a stale answer (last turn's number) is refused
+  assert.throws(() => Rooms.submit(room, second, { round: 1, kind: 'timeout' }), { code: 'stale' });
+});
+
+test('pairs: a game ends when the board is full or both pass; the room ends when every pair is done', () => {
+  const { room } = pairsOf(['Ann', 'Bo', 'Cy', 'Di']);
+  Rooms.start(room);
+  let guard = 0;
+  while (room.state === 'playing' && guard++ < 2000) {
+    for (const m of room.matches) if (!m.over) playTurn(room, m);
+  }
+  assert.equal(room.state, 'ended');
+  for (const m of room.matches) {
+    assert.equal(m.over, true);
+    const [p, q] = m.ids.map((id) => room.players.find((x) => x.id === id));
+    assert.equal(m.winner, p.score === q.score ? null : p.score > q.score ? p.id : q.id);
+  }
+});
+
+test('pairs: an odd one out plays the CPU, which takes its own turns', () => {
+  const { room } = pairsOf(['Ann', 'Bo', 'Cy'], { odd: 'cpu' });
+  Rooms.start(room);
+  const vsCpu = room.matches.find((m) => m.ids.includes('cpu'));
+  assert.ok(vsCpu);
+  assert.equal(Rooms.students(room).length, 3); // the CPU isn't a student
+  let guard = 0;
+  while (!vsCpu.over && guard++ < 500) playTurn(room, vsCpu);
+  assert.equal(vsCpu.over, true);
+  assert.ok(room.players.find((p) => p.isCpu).score > 0);
+  assert.equal(Rooms.leaderboard(room).some((p) => p.name === 'CPU'), false);
+});
+
+test('pairs: the teacher plays the odd one out on the screen or from another device', () => {
+  const { room } = pairsOf(['Ann', 'Bo', 'Cy'], { odd: 'device' });
+  assert.deepEqual(Rooms.oddOpponent(room), { needed: true, how: 'device', ready: false });
+  assert.throws(() => Rooms.start(room), { code: 'teacher' });
+  const t = Rooms.joinTeacher(room);
+  t.connections = 1;
+  assert.equal(Rooms.joinTeacher(room), t); // joining again is the same player
+  Rooms.start(room);
+  assert.ok(room.matches.some((m) => m.ids.includes(t.id)));
+  // Even numbers: nobody needs the teacher
+  const even = pairsOf(['Ann', 'Bo'], { odd: 'device' }).room;
+  assert.equal(Rooms.oddOpponent(even).needed, false);
+  // Students can't pretend to be the teacher or the CPU
+  assert.throws(() => Rooms.join(room, 'Teacher'), { code: 'name' });
+  assert.throws(() => Rooms.join(room, 'cpu'), { code: 'name' });
+});
+
+test('pairs: matching can shuffle (avoiding last partners), keep, or follow the teacher’s arrangement', () => {
+  const { room, players } = pairsOf(['Ann', 'Bo', 'Cy', 'Di'], { matching: 'arrange' });
+  const [ann, bo, cy, di] = players.map((p) => p.id);
+  assert.deepEqual(Rooms.syncOrder(room), [ann, bo, cy, di]);
+  Rooms.swapOrder(room, bo, cy); // Ann + Cy, Bo + Di
+  Rooms.start(room);
+  const partners = (id) => room.matches.find((m) => m.ids.includes(id)).ids.find((x) => x !== id);
+  assert.equal(partners(ann), cy);
+  assert.equal(partners(bo), di);
+  // keep: the same pairs next game
+  Rooms.backToLobby(room);
+  Rooms.setPairOptions(room, { matching: 'keep' });
+  Rooms.start(room, Math.random);
+  assert.equal(partners(ann), cy);
+  // shuffle: nobody gets last game's partner when that's possible
+  Rooms.backToLobby(room);
+  Rooms.setPairOptions(room, { matching: 'shuffle' });
+  Rooms.start(room, Math.random);
+  assert.notEqual(partners(ann), cy);
+  assert.notEqual(partners(bo), di);
+});
+
+test('pairs: someone leaving hands their partner the win', () => {
+  const { room, players } = pairsOf(['Ann', 'Bo', 'Cy', 'Di']);
+  Rooms.start(room);
+  const m = Rooms.matchOf(room, players[0]);
+  const partner = m.ids.find((id) => id !== players[0].id);
+  Rooms.removePlayer(room, players[0].id);
+  assert.equal(m.over, true);
+  assert.equal(m.winner, partner);
+  assert.equal(m.left, players[0].id);
+  assert.equal(Rooms.teacherView(room).matches.find((x) => x.id === m.id).players.find((p) => p.id === players[0].id).name, 'Ann');
+  assert.equal(room.state, 'playing'); // the other pair is still going
+});
+
+test('pairs: views show each student their own match; the teacher sees every match', () => {
+  const { room, players } = pairsOf(['Ann', 'Bo', 'Cy']);
+  const t = Rooms.joinTeacher(room);
+  Rooms.start(room);
+  const view = Rooms.studentView(room, players[0]);
+  assert.equal(view.type, 'pairs');
+  assert.equal(view.match.players.length, 2);
+  assert.ok(view.match.players.some((p) => p.id === players[0].id));
+  const tv = Rooms.teacherView(room);
+  assert.equal(tv.matches.length, 2);
+  assert.equal(tv.players.length, 3); // leaderboard: students only
+  assert.equal(Rooms.studentView(room, t).match.players.some((p) => p.isTeacher), true);
+});
+
+// ---------------------------------------------------------------- tournaments
+
+function tournamentOf(names, settings = {}) {
+  const room = Rooms.createRoom({ type: 'tournament', ...settings }, { rng: () => 0.3 });
+  const players = names.map((n) => Object.assign(Rooms.join(room, n), { connections: 1 }));
+  return { room, players };
+}
+
+// Play every running match to the end (stronger = earlier in the list wins more often, not always).
+function playAll(room) {
+  let guard = 0;
+  while (room.state === 'playing' && guard++ < 20000) {
+    const live = room.matches.filter((m) => !m.over);
+    if (!live.length) {
+      if (room.roundReady) Rooms.advanceTournament(room);
+      else break;
+      continue;
+    }
+    for (const m of live) playTurn(room, m);
+  }
+}
+
+test('tournaments: default to short games, and every format plays through to a champion', () => {
+  for (const format of ['knockout', 'double', 'roundrobin', 'swiss', 'koth']) {
+    const { room } = tournamentOf(['Ann', 'Bo', 'Cy', 'Di', 'Ed'], { format, kothMatches: 6 });
+    assert.equal(room.settings.matchTurns, 12);
+    Rooms.start(room);
+    playAll(room);
+    assert.equal(room.state, 'ended', format);
+    const view = Rooms.teacherView(room).tournament;
+    assert.ok(view.champion, `${format} has a champion`);
+    assert.equal(view.standings[0].name, view.champion);
+    for (const m of room.matches) assert.ok(m.turn - 1 <= 12, 'games stop after 12 turns');
+  }
+});
+
+test('tournaments: a tied game still has a winner', () => {
+  const { room, players } = tournamentOf(['Ann', 'Bo']);
+  Rooms.start(room);
+  const m = room.matches[0];
+  Rooms.end(room); // both on 0 points: first-try answers tie too, so a coin decides
+  assert.ok(m.ids.includes(m.winner));
+  assert.equal(m.tiebreak, 'coin');
+  assert.equal(Rooms.teacherView(room).tournament.champion, players.find((p) => p.id === m.winner).name);
+});
+
+test('tournaments: knocked-out students, byes and walkovers', () => {
+  const { room, players } = tournamentOf(['Ann', 'Bo', 'Cy']); // knockout of 3: one bye
+  Rooms.start(room);
+  assert.equal(room.matches.length, 1);
+  const byePlayer = players.find((p) => !room.matches[0].ids.includes(p.id));
+  assert.equal(Rooms.studentView(room, byePlayer).tournament.status, 'bye');
+  // someone in the match leaves: their opponent goes through
+  const leaver = room.players.find((p) => p.id === room.matches[0].ids[0]);
+  Rooms.removePlayer(room, leaver.id);
+  assert.equal(room.roundReady, true);
+  Rooms.advanceTournament(room);
+  assert.equal(room.matches.length, 1); // the final
+  const final = room.matches[0];
+  assert.ok(final.ids.includes(byePlayer.id));
+  playAll(room);
+  assert.equal(room.state, 'ended');
+  const winnerView = Rooms.studentView(room, room.players.find((p) => p.id === final.winner)).tournament;
+  assert.equal(winnerView.status, 'champion');
 });

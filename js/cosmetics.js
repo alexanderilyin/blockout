@@ -168,8 +168,12 @@
   }
 
   // Add every paid option to the shop (once), grouped by category.
+  // Each category's paid looks are a chain (a skill tree, like the main menu):
+  // each needs the one listed before it, so only the next one shows what it is
+  // and what it costs. Seasonal looks stay outside the chains.
   function registerShopItems(shop) {
     for (const cat of CATEGORIES) {
+      let previous = null;
       for (const opt of cat.options) {
         const id = itemFor(cat.id, opt.id);
         if (!id) continue;
@@ -179,6 +183,9 @@
           fields.season = opt.season;
           fields.seasonLabel = SEASONS[opt.season].label;
           fields.available = (now) => seasonActive(opt.season, now);
+        } else {
+          if (previous) fields.requires = previous;
+          previous = id;
         }
         if (existing) Object.assign(existing, fields);
         else shop.push({ id, ...fields });

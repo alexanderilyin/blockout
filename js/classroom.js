@@ -52,8 +52,14 @@
   }
 
   const health = () => request('GET', '/api/health');
+  const roomInfo = (code) => request('GET', `/api/rooms/${encodeURIComponent(code)}/info`);
   const createRoom = (settings) => request('POST', '/api/rooms', { settings });
   const join = (code, name) => request('POST', `/api/rooms/${encodeURIComponent(code)}/join`, { name });
+  // The teacher as a player (pairs: playing the odd one out), from the projector
+  // screen (with the teacher key) or another device (with the play key from its link).
+  const joinAsTeacher = (h) => request('POST', `/api/rooms/${h.code}/join`, { teacher: h.teacherKey });
+  const joinWithPlayKey = (code, play) => request('POST', `/api/rooms/${encodeURIComponent(code)}/join`, { play });
+  const roll = (s) => request('POST', `/api/rooms/${s.code}/roll`, { id: s.id, key: s.key });
   const leave = (s) => request('POST', `/api/rooms/${s.code}/leave`, { id: s.id, key: s.key });
   const sendResult = (s, result) => request('POST', `/api/rooms/${s.code}/result`, { id: s.id, key: s.key, ...result });
   const teacher = (h, action, extra = {}) => request('POST', `/api/rooms/${h.code}/teacher`, { key: h.teacherKey, action, ...extra });
@@ -147,10 +153,11 @@
     } catch (e) {}
   }
 
-  // Join links look like https://host/#class=ABCD
-  function codeFromHash(hash = location.hash) {
-    const m = /^#class=([A-Za-z]{4})$/.exec(hash || '');
-    return m ? m[1].toUpperCase() : null;
+  // Join links look like https://host/#class=ABCD; the teacher's other device
+  // gets #class=ABCD&play=KEY.
+  function linkFromHash(hash = location.hash) {
+    const m = /^#class=([A-Za-z]{4})(?:&play=([0-9a-f]+))?$/.exec(hash || '');
+    return m ? { code: m[1].toUpperCase(), play: m[2] || null } : null;
   }
 
   root.BlockoutClassroom = {
@@ -158,8 +165,12 @@
     served,
     check,
     health,
+    roomInfo,
     createRoom,
     join,
+    joinAsTeacher,
+    joinWithPlayKey,
+    roll,
     leave,
     sendResult,
     teacher,
@@ -169,6 +180,6 @@
     saveSession: (s) => store(SESSION_KEY, s),
     host: () => load(HOST_KEY),
     saveHost: (h) => store(HOST_KEY, h),
-    codeFromHash,
+    linkFromHash,
   };
 })(window);

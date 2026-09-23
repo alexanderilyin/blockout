@@ -70,3 +70,20 @@ test('stickers: weighted drops, duplicates trade for points by rarity', () => {
   assert.equal(t.wallet, 25);
   assert.equal(C.duplicateValue(t), 0);
 });
+
+test('wardrobe looks are chains per category: only the next one shows; seasonal ones stand apart', () => {
+  const s = P.createProgress();
+  s.wallet = 50000;
+  assert.equal(P.isHidden(s, 'cos.dice.wood'), false); // first paid dice look
+  assert.equal(P.isHidden(s, 'cos.dice.candy'), true);
+  assert.equal(P.shopItem('cos.dice.candy').requires, 'cos.dice.wood');
+  assert.equal(P.shopItem('goldenDice').requires, 'cos.dice.galaxy');
+  assert.equal(P.buy(s, 'cos.dice.candy').reason, 'requires');
+  assert.equal(P.buy(s, 'cos.dice.wood').ok, true);
+  assert.equal(P.isHidden(s, 'cos.dice.candy'), false);
+  // seasonal looks aren't part of a chain
+  assert.equal(P.shopItem('cos.dice.pumpkin').requires, undefined);
+  // each category has its own chain
+  assert.equal(P.isHidden(s, 'cos.keypad.candy'), false);
+  assert.equal(P.isHidden(s, 'cos.keypad.retro'), true);
+});

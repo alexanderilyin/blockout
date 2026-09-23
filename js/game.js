@@ -40,7 +40,8 @@
     theme: 'auto', // 'auto' follows the device; 'light' or 'dark' forces one (free, not in the shop)
   };
   // Board sizes other than the small one are bought in the shop.
-  const BOARD_UNLOCK = { 12: null, 16: 'board16', 20: 'board20', custom: 'boardCustom' };
+  // Only the smallest board is free; every other size is bought in the shop.
+  const BOARD_UNLOCK = { 6: null, 8: 'board8', 10: 'board10', 12: 'board12', 16: 'board16', 20: 'board20', 24: 'board24', custom: 'boardCustom' };
   const PROGRESS_KEY = 'blockout.progress';
   const PASS_DELAY = 1600;
   const AUTO_PLACE_MS = 900; // how long an auto-placed rectangle is previewed
@@ -74,6 +75,9 @@
     hostSetup: $('class-host-setup'),
     hostSetupTitle: $('class-host-title'),
     hostSize: $('host-size'),
+    hostTypeField: $('host-type-field'),
+    hostType: $('host-type'),
+    hostTypeHelp: $('host-type-help'),
     hostDifficulty: $('host-difficulty'),
     hostRounds: $('host-rounds'),
     hostError: $('host-error'),
@@ -85,8 +89,8 @@
     hostQr: $('host-qr'),
     hostUrl: $('host-url'),
     hostCode: $('host-code'),
-    hostSettings: $('host-settings'),
-    hostChange: $('host-change'),
+    hostSettingsGrid: $('host-settings-grid'),
+    hostQuick: $('host-quick'),
     hostStartBtn: $('host-start-btn'),
     hostLocalHelp: $('host-local-help'),
     hostPlay: $('host-play'),
@@ -108,11 +112,39 @@
     hostCloseBtn: $('host-close-btn'),
     hostRosterTitle: $('host-roster-title'),
     hostRoster: $('host-roster'),
+    hostPairs: $('host-pairs'),
+    hostMatching: $('host-matching'),
+    hostOdd: $('host-odd'),
+    hostPairsHelp: $('host-pairs-help'),
+    hostPairList: $('host-pair-list'),
+    hostTeacherDevice: $('host-teacher-device'),
+    hostTeacherQr: $('host-teacher-qr'),
+    hostTeacherUrl: $('host-teacher-url'),
+    hostTeacherStatus: $('host-teacher-status'),
+    hostMyGameBtn: $('host-mygame-btn'),
+    hostCopyLink: $('host-copy-link'),
+    hostCopyMsg: $('host-copy-msg'),
+    hostShareBtn: $('host-share-btn'),
+    hostCopyTeacher: $('host-copy-teacher'),
+    hostMatches: $('host-matches'),
+    hostDice: $('host-dice'),
+    hostProgress: $('host-progress'),
+    hostAutoLabel: $('host-auto-label'),
+    hostMatchResults: $('host-match-results'),
+    hostTournament: $('host-tournament'),
+    hostTournamentFinal: $('host-tournament-final'),
+    resultTournament: $('result-tournament'),
     singleName: $('single-name'),
     playerCount: $('player-count'),
     nameInputs: $('name-inputs'),
     namesError: $('names-error'),
     boardSize: $('board-size'),
+    gameLevel: $('game-level'),
+    gameLevelHelp: $('game-level-help'),
+    gameTimerField: $('game-timer-field'),
+    gameTimer: $('game-timer'),
+    gameTimerHelp: $('game-timer-help'),
+    boardSizeHelp: $('board-size-help'),
     customSize: $('custom-size'),
     customSizeInput: $('custom-size-input'),
     customSizeEcho: $('custom-size-echo'),
@@ -181,6 +213,10 @@
     practiceSetup: $('practice-setup'),
     practiceName: $('practice-name'),
     practiceCount: $('practice-count'),
+    practiceCountHelp: $('practice-count-help'),
+    practiceTimerField: $('practice-timer-field'),
+    practiceTimer: $('practice-timer'),
+    practiceTimerHelp: $('practice-timer-help'),
     practicePreview: $('practice-preview'),
     practiceTables: $('practice-tables'),
     practiceLevel: $('practice-level'),
@@ -207,7 +243,6 @@
     prHelp: $('pr-help'),
     practiceDone: $('practice-done'),
     pdSub: $('pd-sub'),
-    pdRewards: $('pd-rewards'),
     pdBody: $('pd-body'),
     pdDetailsBtn: $('pd-details-btn'),
     pdShopBtn: $('pd-shop-btn'),
@@ -264,7 +299,8 @@
   // types[i] is 'human' or 'cpu' for each multiplayer slot.
   // names start empty: multiplayer players type their own ("Player N" is only a placeholder)
   // multiKind: 'local' (one screen) or 'classroom' (not built yet)
-  const setup = { mode: 'single', multiKind: 'local', count: 2, size: 12, names: ['', '', '', ''], types: ['human', 'human', 'human', 'human'] };
+  // level/timer: single player's Learn / Expert and Expert's answer timer (seconds)
+  const setup = { mode: 'single', multiKind: 'local', level: 'learn', timer: 0, count: 2, size: 6, names: ['', '', '', ''], types: ['human', 'human', 'human', 'human'] };
 
   // ---------------------------------------------------------------- progress (wallet, unlocks, achievements)
 
@@ -328,7 +364,7 @@
   }
 
   function celebrate(earned) {
-    for (const a of earned) toast(`${a.icon} ${a.minor ? '' : 'Achievement: '}${a.name}`, `+${a.reward} points`);
+    queueAchievements(earned);
     for (const { sticker, isNew } of grantStickers(earned)) {
       toast(`🎁 ${isNew ? 'New sticker' : 'Sticker'}: ${sticker.emoji}`, isNew ? `${sticker.rarity} · added to your album` : `a spare you can swap for points`);
     }
@@ -550,13 +586,68 @@
     }
   }
 
-  const BONUS_TOASTS = { first: '✨', speedy: '⚡', streak: '🔥' };
+  const BONUS_TOASTS = { first: '✨', speedy: '⚡', streak: '🔥', timer: '⏱️' };
 
   function capitalize(text) {
     return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
   // Small pop-up message in the corner that disappears by itself.
+  // ---- achievements: a big banner at the bottom, one at a time, with confetti
+
+  const achievementQueue = [];
+  let bannerUp = false;
+  const BANNER_MS = 3200;
+  const MINOR_BANNER_MS = 1800;
+
+  // Minor ones in a row (fact speed badges) share one smaller banner.
+  function queueAchievements(list) {
+    for (const a of list) {
+      const last = achievementQueue[achievementQueue.length - 1];
+      if (a.minor && last && last.minor) {
+        last.count++;
+        last.reward += a.reward;
+        continue;
+      }
+      achievementQueue.push({ icon: a.icon, name: a.name, reward: a.reward, minor: Boolean(a.minor), count: 1 });
+    }
+    if (!bannerUp) showNextAchievement();
+  }
+
+  function showNextAchievement() {
+    const a = achievementQueue.shift();
+    if (!a) {
+      bannerUp = false;
+      return;
+    }
+    bannerUp = true;
+    const box = make('div', 'achievement-banner' + (a.minor ? ' minor' : ''));
+    box.setAttribute('role', 'status');
+    const text = make('div', 'banner-text');
+    text.append(
+      make('span', 'banner-kicker', a.minor ? 'Badge earned' : 'Achievement earned'),
+      make('strong', 'banner-name', a.count > 1 ? `+${a.count} fact speed badges` : a.name),
+      make('span', 'banner-reward', `+${formatPoints(a.reward)} points`)
+    );
+    box.append(make('span', 'banner-icon', a.icon), text);
+    document.body.append(box);
+    requestAnimationFrame(() => box.classList.add('show'));
+    setTimeout(() => confettiFrom(box), 250);
+    let gone = false;
+    const next = () => {
+      if (gone) return;
+      gone = true;
+      box.classList.remove('show');
+      box.classList.add('leaving');
+      setTimeout(() => {
+        box.remove();
+        showNextAchievement();
+      }, 350);
+    };
+    // (clicks go straight through the banner, so it never blocks the buttons under it)
+    setTimeout(next, a.minor ? MINOR_BANNER_MS : BANNER_MS);
+  }
+
   function toast(title, detail = '') {
     const box = document.createElement('div');
     box.className = 'toast';
@@ -697,10 +788,17 @@
         if (!owned) {
           const check = Progress.canBuy(progress, item, now);
           chip.dataset.unlock = item;
-          if (check.reason !== 'season') chip.dataset.cost = opt.price;
           const tag = make('span', 'lock-badge');
-          if (check.reason === 'season') tag.append(icon('lock'), ` ${Progress.shopItem(item).seasonLabel}`);
-          else tag.append(icon('lock'), ` ${formatPoints(opt.price)}`);
+          if (Progress.isHidden(progress, item)) {
+            // further down this category's chain: a placeholder, like the main menu
+            chip.classList.add('skeleton');
+            chip.setAttribute('aria-label', 'Locked: unlock the one before it first');
+            tag.append(icon('lock'));
+          } else if (check.reason === 'season') tag.append(icon('lock'), ` ${Progress.shopItem(item).seasonLabel}`);
+          else {
+            chip.dataset.cost = opt.price;
+            tag.append(icon('lock'), ` ${formatPoints(opt.price)}`);
+          }
           chip.append(tag);
         }
         row.append(chip);
@@ -837,6 +935,7 @@
     if (key === 'difficulty') return `difficulty.${value}`;
     if (key === 'cpuSteps') return 'cpuInstant';
     if (key === 'answerTime') return `answerTime${value}`; // each length is its own unlock
+    if (key === 'placeMode') return value === 'auto' ? 'placeAuto' : 'placeMode'; // Click, then Auto
     return key;
   }
 
@@ -864,10 +963,17 @@
   }
 
   // Mark a button as locked with a "🔒 price" badge, or clear it.
+  // Locked options show their price; ones further down a chain (see SHOP
+  // `requires`) are a blurred placeholder with just a lock, so only the next
+  // step shows what it is and what it costs.
   function setLockBadge(btn, itemId) {
     const locked = !Progress.isUnlocked(progress, itemId);
+    const hidden = locked && Progress.isHidden(progress, itemId);
     btn.classList.toggle('locked', locked);
+    btn.classList.toggle('skeleton', hidden);
     btn.dataset.unlock = locked ? itemId : '';
+    if (hidden) btn.setAttribute('aria-label', 'Locked: unlock the one before it first');
+    else if (btn.getAttribute('aria-label') === 'Locked: unlock the one before it first') btn.removeAttribute('aria-label');
     let badge = btn.querySelector('.lock-badge');
     if (locked && !badge) {
       badge = document.createElement('span');
@@ -875,7 +981,7 @@
       btn.append(badge);
     }
     if (badge && !locked) badge.remove();
-    if (badge && locked) badge.replaceChildren(icon('lock'), ` ${formatPoints(Progress.shopItem(itemId).price)}`);
+    if (badge && locked) badge.replaceChildren(icon('lock'), hidden ? '' : ` ${formatPoints(Progress.shopItem(itemId).price)}`);
   }
 
   function syncSettingsUI() {
@@ -900,6 +1006,8 @@
     saveSettings();
     syncSettingsUI();
     updatePracticePreview();
+    renderGameLevel();
+    renderBoardHint();
   }
 
   el.settingsDialog.addEventListener('click', (e) => {
@@ -961,7 +1069,8 @@
     game.diceMode = settings.diceMode;
     game.autoRoll = settings.autoRoll === 'auto';
     game.cpuInstant = settings.cpuSteps === 'instant';
-    game.answerTime = Number(settings.answerTime) || 0;
+    // single player uses its own Expert timer; the Settings timer is for Home multiplayer
+    game.answerTime = game.mode === 'single' ? game.levelTimer : Number(settings.answerTime) || 0;
     game.fitMode = settings.fitRolls;
   }
   el.settingsDialog.addEventListener('keydown', (e) => {
@@ -1007,6 +1116,7 @@
     el.singleSetup.hidden = setup.mode !== 'single';
     el.multiSetup.hidden = setup.mode !== 'multi';
     el.practiceSetup.hidden = setup.mode !== 'practice';
+    if (setup.mode !== 'practice') renderBoardHint();
     el.localSetup.hidden = setup.multiKind !== 'local';
     el.classroomSetup.hidden = setup.multiKind !== 'classroom';
     el.boardSizeField.hidden = setup.mode === 'practice' || classroom; // practice has no board
@@ -1048,6 +1158,72 @@
 
   function syncBoardLocks() {
     for (const btn of el.boardSize.querySelectorAll('button')) setLockBadge(btn, BOARD_UNLOCK[btn.dataset.size]);
+    renderBoardHint();
+    renderGameLevel(); // (difficulty or purchases change it too)
+  }
+
+  // ---- single player: Level (Learn / Expert) and Expert's timer, per difficulty, like Practice
+  const GAME_EXPERT_BONUS = 2;
+  const GAME_LEVEL_HELP = {
+    learn: 'Learn: “Help me count” is there whenever you need it.',
+    expert: 'Expert: no help counting, and bonus points are doubled!',
+  };
+  function renderGameLevel() {
+    if (!el.gameLevel) return;
+    const d = settings.difficulty;
+    const expertId = Progress.gameExpertId(d);
+    if (!Progress.isUnlocked(progress, expertId)) setup.level = 'learn';
+    for (const btn of el.gameLevel.querySelectorAll('button')) {
+      btn.classList.toggle('selected', btn.dataset.level === setup.level);
+      setLockBadge(btn, btn.dataset.level === 'expert' ? expertId : null);
+    }
+    el.gameLevelHelp.textContent = GAME_LEVEL_HELP[setup.level];
+    el.gameTimerField.hidden = setup.level !== 'expert';
+    const timerId = (secs) => (Number(secs) ? Progress.gameTimerId(Number(secs), d) : null);
+    if (!Progress.isUnlocked(progress, timerId(setup.timer))) setup.timer = 0;
+    for (const btn of el.gameTimer.querySelectorAll('button')) {
+      btn.classList.toggle('selected', Number(btn.dataset.secs) === setup.timer);
+      setLockBadge(btn, timerId(btn.dataset.secs));
+    }
+    const top = (secs) => Progress.TIMER_BONUS_MAX[secs] * GAME_EXPERT_BONUS;
+    el.gameTimerHelp.textContent = setup.timer
+      ? `⏱️ Answer fast for a timer bonus of up to +${top(setup.timer)} a question: the quicker, the more. If time runs out, the rectangle comes off and scores nothing.`
+      : `⏱️ A timer earns a bonus for quick answers: up to +${top(30)} a question with 30 s, +${top(10)} with 10 s, +${top(5)} with 5 s.`;
+  }
+  el.gameLevel.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
+    setup.level = btn.dataset.level;
+    renderGameLevel();
+  });
+  el.gameTimer.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
+    setup.timer = Number(btn.dataset.secs);
+    renderGameLevel();
+  });
+
+  // Under the board sizes: the finishing bonus for the chosen size
+  function renderBoardHint() {
+    if (!el.boardSizeHelp) return;
+    // Legend rolls a teen (11–19), so it needs a board it fits on
+    const fits = Core.fitsDifficulty(settings.difficulty, setup.size);
+    if (setup.mode !== 'practice') el.startBtn.disabled = !fits;
+    el.boardSizeHelp.classList.toggle('warn', !fits);
+    if (!fits) {
+      el.boardSizeHelp.textContent = `⚠️ ${Progress.DIFFICULTY_NAMES[settings.difficulty]} rolls numbers like 14 × 7, so it needs a board of 12×12 or bigger.`;
+      return;
+    }
+    const bonus = Progress.boardFinishBonus(setup.size);
+    if (settings.difficulty === 'legend' && setup.size < 19 && setup.mode !== 'practice') {
+      el.boardSizeHelp.textContent = `On ${setup.size}×${setup.size}, Legend rolls up to ${setup.size} × 9. Bigger boards bring bigger teens (all the way to 19 on 20×20).`;
+      return;
+    }
+    el.boardSizeHelp.textContent = bonus
+      ? `🏁 Finish a game against the CPU on ${setup.size}×${setup.size} for +${bonus} bonus points.`
+      : `🏁 Bigger boards earn a finishing bonus against the CPU: +${Progress.boardFinishBonus(8)} for 8×8, up to +${Progress.boardFinishBonus(24)} for 24×24.`;
   }
   syncBoardLocks();
 
@@ -1059,6 +1235,7 @@
     const custom = btn.dataset.size === 'custom';
     el.customSize.hidden = !custom;
     setup.size = custom ? readCustomSize() : Number(btn.dataset.size);
+    renderBoardHint();
   });
 
   function clampCustom(n) {
@@ -1076,10 +1253,12 @@
   function setCustomSize(size) {
     el.customSizeInput.value = clampCustom(size);
     setup.size = readCustomSize();
+    renderBoardHint();
   }
 
   el.customSizeInput.addEventListener('input', () => {
     if (el.customSizeInput.value !== '') setup.size = readCustomSize();
+    renderBoardHint();
   });
   el.customSizeInput.addEventListener('change', () => setCustomSize(readCustomSize()));
   el.customSize.addEventListener('click', (e) => {
@@ -1141,7 +1320,10 @@
     e.preventDefault();
     if (setup.mode === 'multi' && setup.multiKind === 'classroom') return; // not built yet
     if (setup.mode === 'practice') {
-      startPractice(el.practiceName.value.trim() || 'You', practiceRoundSize, [...practiceTables], practiceLevel === 'expert');
+      const tables = practiceTableList();
+      if (!tables.length) return;
+      const expert = practiceLevel === 'expert';
+      startPractice(el.practiceName.value.trim() || 'You', practiceRoundSize, tables, expert, expert ? practiceTimerSecs : 0);
       return;
     }
     saveNameInputs();
@@ -1183,6 +1365,7 @@
       return { name, avatar: ch.avatar, hello: ch.hello };
     }
     if (mode === 'multi') return {};
+    if (mode === 'pair' && !p.statsName) return {}; // your partner isn't wearing your Wardrobe
     const avatar = look('avatar');
     const t = Cosmetics.title(settings.cosmetics.title);
     return { avatar: avatar.id === 'none' ? '' : avatar.preview, title: t.id === 'none' ? '' : t.name };
@@ -1243,16 +1426,32 @@
       cpuPreview: null,
       lastRect: null,
       placeMode: cfg.placeMode, // 'draw': drag out the rectangle; 'click': click to drop it
-      diceMode: cfg.diceMode, // 'virtual': the app rolls; 'real': players roll real dice and enter them
+      // 'virtual': the app rolls; 'real': players roll real dice and enter them
+      // (not after Hard: those dice can't be rolled at the table)
+      diceMode: Core.usesPairDice(cfg.difficulty) ? 'virtual' : cfg.diceMode,
       picked: [null, null], // real-dice values entered so far
       drag: null, // { c0, r0, c1, r1 } while a human is drawing
       pending: null, // human rectangle waiting for its points to be worked out
       counting: null, // { rect, byRows, shown, group } while skip-counting on the board
     };
-    game.diceBag = Core.createDice(size, rng, game.sides); // loaded to suit board and difficulty
+    // Loaded to suit board and difficulty. After Hard, the dice deal chosen
+    // pairs: Tricky skips the easy facts, Master leans on your weakest facts,
+    // Legend deals a teen × a one-digit number.
+    game.faces = Core.diceFaces(cfg.difficulty);
+    game.diceBag = Core.usesPairDice(cfg.difficulty)
+      ? Core.createPairDice(size, rng, cfg.difficulty, cfg.difficulty === 'master' ? weakFactWeight(playerDefs.find((p) => !p.cpu)) : null)
+      : Core.createDice(size, rng, game.sides);
+    // Single player's Level: Expert has no "Help me count", doubles bonus points,
+    // and can have an answer timer (its own, not the Settings one)
+    const levelled = mode === 'single' && !invite && !extra;
+    game.expert = levelled && setup.level === 'expert';
+    game.levelTimer = game.expert ? setup.timer : 0;
+    if (levelled) game.answerTime = game.levelTimer;
     buildDicePicks(game.sides);
-    el.againBtn.hidden = mode === 'class'; // the teacher starts the next class game
-    el.toMenuBtn.textContent = mode === 'class' ? 'Leave class' : 'Main menu';
+    el.resultTournament.hidden = true;
+    const classroomGame = mode === 'class' || mode === 'pair';
+    el.againBtn.hidden = classroomGame; // the teacher starts the next class game
+    el.toMenuBtn.textContent = !classroomGame ? 'Main menu' : extra.classroom.session.host ? 'Back to the class' : 'Leave class';
     el.startScreen.hidden = true;
     el.gameOver.hidden = true;
     el.gameScreen.hidden = false;
@@ -1306,6 +1505,7 @@
       render();
       return;
     }
+    if (game.mode === 'pair') return pairTurnOrWait();
     if (p.cpu) {
       game.phase = 'cpu';
       setMsg(`${p.name} is rolling…`);
@@ -1337,9 +1537,10 @@
     const rollStyle = `roll-${settings.cosmetics.roll}`; // Wardrobe: wobble, tumble, bounce, sparkle
     el.dieA.classList.add('rolling', rollStyle);
     el.dieB.classList.add('rolling', rollStyle);
+    const face = (list) => list[Math.floor(Math.random() * list.length)];
     for (let i = 0; i < 8; i++) {
-      renderDie(el.dieA, Core.rollDie(Math.random, game.sides));
-      renderDie(el.dieB, Core.rollDie(Math.random, game.sides));
+      renderDie(el.dieA, face(game.faces.a));
+      renderDie(el.dieB, face(game.faces.b));
       await waitInGame(55);
     }
     el.dieA.classList.remove('rolling', rollStyle);
@@ -1352,6 +1553,7 @@
 
   async function humanRoll() {
     if (!game || game.phase !== 'roll' || currentPlayer().cpu || game.diceMode === 'real') return;
+    if (game.mode === 'pair') return pairRoll(); // the server rolls for a pairs game
     const [a, b] = await rollDice();
     await startPlacing(a, b);
   }
@@ -1448,7 +1650,7 @@
     game.passes++;
     const who = game.mode !== 'multi' && !p.cpu ? 'You pass' : `${p.name} passes`;
     setMsg(`No room for a ${a} × ${b} anywhere. ${who}.`);
-    if (game.mode === 'class') reportClass({ kind: 'pass' });
+    if (game.mode === 'class') reportClass({ kind: 'pass' }); // (pairs: the server passes for you)
     render();
     if (p.cpu) await finishComputerTurn(cpuStep());
     else await waitInGame(PASS_DELAY);
@@ -1500,6 +1702,7 @@
     showStreak(el.streakBadge, currentPlayer().streak);
     setKeypadEnabled(true);
     el.helpBtn.disabled = false;
+    el.helpBtn.hidden = Boolean(game.expert); // Expert: no help counting
     render();
     startTimer();
     if (window.innerWidth <= 820) el.math.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1543,6 +1746,8 @@
     if (!pend || pend.entry === '') return;
     const { rect } = pend;
     if (Number(pend.entry) === rect.area) {
+      // the timer bonus goes by how much time was left (not in class games: the server scores those)
+      const timerLeft = timer && game.answerTime && game.mode !== 'class' && game.mode !== 'pair' ? { secs: game.answerTime, left: timer.remaining / timer.total } : null;
       stopTimer();
       const p = currentPlayer();
       const ms = performance.now() - pend.startedAt - pend.pausedMs;
@@ -1550,7 +1755,7 @@
       p.stats.times.push(ms);
       p.streak = firstTry ? p.streak + 1 : 0;
       p.bestStreak = Math.max(p.bestStreak, p.streak);
-      const bonus = Progress.answerBonus({ firstTry, ms, streak: p.streak });
+      const bonus = Progress.answerBonus({ firstTry, ms, streak: p.streak, timer: timerLeft });
       game.phase = 'busy';
       setKeypadEnabled(false);
       el.helpBtn.disabled = true;
@@ -1559,10 +1764,11 @@
       const squares = `+${rect.area} ${rect.area === 1 ? 'square' : 'squares'}`;
       el.mathFeedback.textContent = firstTry ? `Correct! ${squares} 🎉` : `You got it! ${squares}`;
       // Each bonus pops up on its own, like an achievement.
-      for (const part of bonus.parts) toast(`${BONUS_TOASTS[part.label.split(' ')[0]]} ${capitalize(part.label)}`, `+${part.points} bonus points`);
-      awardPoints(rect, firstTry, bonus.total);
+      const mult = game.expert ? GAME_EXPERT_BONUS : 1; // Expert doubles bonus points
+      for (const part of bonus.parts) toast(`${BONUS_TOASTS[part.label.split(' ')[0]]} ${capitalize(part.label)}`, `+${part.points * mult} bonus points${mult > 1 ? ' (×2 Expert)' : ''}`);
+      awardPoints(rect, firstTry, bonus.total * mult);
       showStreak(el.streakBadge, p.streak);
-      if (game.mode === 'class') reportClass({ kind: 'placed', rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h }, firstTry, ms: Math.round(ms) });
+      if (game.mode === 'class' || game.mode === 'pair') reportClass({ kind: 'placed', rect: { x: rect.x, y: rect.y, w: rect.w, h: rect.h }, firstTry, ms: Math.round(ms) });
       if (countsForStats()) {
         Progress.recordAnswer(progress, statsName(p), {
           a: rect.a,
@@ -1572,7 +1778,8 @@
           wrongAnswers: pend.miss ? pend.miss.answers : [],
           ms,
         });
-        celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: p.streak, a: rect.a, b: rect.b, facts: playerFacts(statsName(p)), size: unlockedTableSize() }));
+        const learned = Progress.learnedAfterHelp(progress, rect.a, rect.b, firstTry);
+        celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: p.streak, a: rect.a, b: rect.b, facts: playerFacts(statsName(p)), size: unlockedTableSize(), learned }));
         saveProgress();
       }
       game.pending = null;
@@ -1592,19 +1799,43 @@
     el.answerBox.textContent = '';
     el.mathFeedback.className = 'math-feedback try';
     el.mathFeedback.textContent = TRY_AGAIN[(pend.attempts - 1) % TRY_AGAIN.length];
-    if (pend.attempts >= 2 && !pend.helped) {
+    if (pend.attempts >= 2 && !pend.helped && !game.expert) {
       el.mathFeedback.textContent = "Let's count them together!";
       helpCount();
     }
   }
 
+  // Legend: a teen times a one-digit number, split into tens and ones
+  // (14 × 7 = 10 × 7 + 4 × 7). Null for anything else.
+  function legendSplit(rect) {
+    if (!game || game.difficulty !== 'legend') return null;
+    const teen = Math.max(rect.a, rect.b);
+    const other = Math.min(rect.a, rect.b);
+    if (teen < 11) return null;
+    const ones = teen - 10;
+    return { teen, other, ones, tens: 10 * other, rest: ones * other };
+  }
+
   async function helpCount() {
     const pend = game.pending;
-    if (!pend || pend.helped || game.counting) return;
+    if (!pend || pend.helped || game.counting || game.expert) return; // Expert: no help
     pend.helped = true;
     currentPlayer().stats.helped++;
+    if (countsForStats()) {
+      Progress.noteHelp(progress, pend.rect.a, pend.rect.b);
+      celebrate(Progress.awardAchievements(progress, { event: 'help' }));
+      saveProgress();
+    }
     el.helpBtn.disabled = true;
     const { rect } = pend;
+    const split = legendSplit(rect);
+    if (split) {
+      // Too many to skip-count: split it, and leave the adding to the player
+      el.countTrail.textContent =
+        `Split ${split.teen} into 10 and ${split.ones}: 10 × ${split.other} = ${split.tens}, ` +
+        `${split.ones} × ${split.other} = ${split.rest}. Now add them up!`;
+      return;
+    }
     const plan = countPlan(rect);
     const totals = [];
     const helpStarted = performance.now(); // the timer is paused while counting
@@ -1641,7 +1872,7 @@
     el.timer.hidden = !game.answerTime;
     if (!game.answerTime) return;
     const id = gameId;
-    const total = game.answerTime * 1000;
+    const total = Progress.timerLength(progress, game.answerTime) * 1000; // (the bonus still follows answerTime)
     timer = { total, remaining: total, last: performance.now() };
     renderTimer();
     timer.interval = setInterval(() => {
@@ -1662,7 +1893,7 @@
 
   function renderTimer() {
     const left = Math.max(0, timer.remaining);
-    el.timerNum.textContent = `${Math.ceil(left / 1000)}s`;
+    el.timerNum.textContent = timerText(left);
     el.timerFill.style.width = `${(left / timer.total) * 100}%`;
     el.timer.classList.toggle('low', left <= 5000);
   }
@@ -1681,7 +1912,7 @@
     noteMiss(pend, { timeout: true });
     p.stats.timeouts++;
     p.streak = 0;
-    if (game.mode === 'class') reportClass({ kind: 'timeout' });
+    if (game.mode === 'class' || game.mode === 'pair') reportClass({ kind: 'timeout' });
     if (countsForStats()) {
       Progress.recordAnswer(progress, statsName(p), { a: rect.a, b: rect.b, firstTry: false, correct: false, wrongAnswers: pend.miss.answers, timeout: true });
       saveProgress();
@@ -1734,7 +1965,15 @@
     const { a, b, area } = rect;
     addStep(`I drew a <span class="num">${a}</span> by <span class="num">${b}</span> rectangle. How many squares is that?`);
     await waitInGame(cpuStep());
-    if (a === 1 || b === 1) {
+    const split = legendSplit(rect);
+    if (split) {
+      addStep(`Split <span class="num">${split.teen}</span> into 10 and <span class="num">${split.ones}</span>.`);
+      await waitInGame(cpuStep());
+      addStep(`10 × ${split.other} = <span class="num">${split.tens}</span> and ${split.ones} × ${split.other} = <span class="num">${split.rest}</span>.`);
+      await waitInGame(cpuStep());
+      addStep(`${split.tens} + ${split.rest} = <span class="num">${area}</span>.`);
+      await waitInGame(cpuStep());
+    } else if (a === 1 || b === 1) {
       const n = a === 1 ? b : a;
       addStep(`It's just 1 ${a === 1 ? 'row' : 'column'} of <span class="num">${n}</span>, so that's ${n}.`);
       await waitInGame(cpuStep());
@@ -1794,7 +2033,7 @@
   }
 
   function endTurn() {
-    if (game.mode === 'class') return beginTurn(); // the teacher's screen ends a class game
+    if (game.mode === 'class' || game.mode === 'pair') return beginTurn(); // the server ends these games
     if (game.passes >= game.players.length || Core.emptyCount(game.board) === 0) {
       finishGame();
       return;
@@ -1938,16 +2177,28 @@
     if (!countsForStats()) {
       // local multiplayer: points only, nothing permanent
       saveProgress();
-      el.rewards.append(make('div', 'reward-points', `🪙 +${formatPoints(points)} points · wallet: ${formatPoints(progress.wallet)}`));
       el.rewards.append(make('p', 'setting-help', 'Multiplayer games are just for fun: they don’t count towards Stats or achievements.'));
       return;
     }
     progress.counters.games++;
+    // Finishing bonus for bigger boards (single player against the CPU)
+    const boardBonus = game.mode === 'single' ? Progress.boardFinishBonus(game.size) : 0;
+    if (boardBonus) {
+      Progress.addPoints(progress, boardBonus);
+      const an = [8, 11, 18].includes(game.size) ? 'an' : 'a'; // "an 8×8", "an 11×11", "an 18×18"
+      toast(`🏁 Finished ${an} ${game.size}×${game.size} game!`, `+${boardBonus} bonus points`);
+    }
     const humanWon = winners.length === 1 && !winners[0].cpu;
+    if (humanWon && game.mode === 'single') {
+      Progress.recordBoardWin(progress, game.size); // reveals the next board
+      syncBoardLocks();
+    }
     const asked = (p) => p.answered + p.stats.timeouts;
     const perfect = humans.some((p) => asked(p) >= 5 && p.firstTry === asked(p));
+    const noHelp = humans.some((p) => asked(p) >= 5 && p.stats.helped === 0);
     const earned = Progress.awardAchievements(progress, {
       event: 'game',
+      noHelp,
       games: progress.counters.games,
       wonVsCpu: game.mode === 'single' && humanWon,
       humanWon,
@@ -1956,34 +2207,21 @@
       difficulty: game.difficulty,
       bestScore: Math.max(...humans.map((p) => p.score)),
     });
-    const stickers = grantStickers(earned);
+    grantStickers(earned); // they show up behind the Stickers button
     saveProgress();
-    appendRewards(points, earned, stickers);
+    showRewards(earned);
   }
 
-  // "+N points", new achievements and stickers on the end screen.
-  function appendRewards(points, earned, stickers) {
-    el.rewards.append(make('div', 'reward-points', `🪙 +${formatPoints(points)} points · wallet: ${formatPoints(progress.wallet)}`));
-    for (const a of earned) {
-      const row = make('div', 'reward-achievement');
-      row.append(make('span', 'achievement-icon', a.icon), make('span', null, `New achievement: ${a.name}`), make('span', 'achievement-reward', `+${a.reward}`));
-      el.rewards.append(row);
-    }
-    if (stickers.length) {
-      const fresh = stickers.filter((x) => x.isNew).map((x) => x.sticker.emoji);
-      const spares = stickers.length - fresh.length;
-      const row = make('div', 'reward-achievement');
-      row.append(
-        make('span', 'achievement-icon', '🎁'),
-        make('span', null, `Stickers: ${fresh.join(' ')}${fresh.length && spares ? ' + ' : ''}${spares ? `${spares} spare${spares === 1 ? '' : 's'}` : ''}`)
-      );
-      el.rewards.append(row);
-    }
+  // End of a game: new achievements get their banners. Points and stickers go
+  // in quietly: the Shop / Wardrobe / Stickers buttons below show what's new.
+  function showRewards(earned) {
+    queueAchievements(earned);
   }
 
   // Single-player and class games (and practice) count towards Stats and achievements.
   function countsForStats() {
-    return game && (game.mode === 'single' || game.mode === 'class');
+    if (game && game.classroom && game.classroom.session.teacher) return false; // the teacher playing an odd one out
+    return game && ['single', 'class', 'pair'].includes(game.mode);
   }
 
   // Whose times tables an answer counts towards. In a class game you play under
@@ -2282,14 +2520,16 @@
     }
     const games = history.filter((g) => !g.kind);
     const rounds = history.filter((g) => g.kind === 'practice');
-    const classes = history.filter((g) => g.kind === 'class');
-    if (history.length) renderGameHistory(body, games, rounds, classes);
+    const classes = history.filter((g) => g.kind === 'class' && !g.type);
+    const pairGames = history.filter((g) => g.kind === 'class' && g.type === 'pairs');
+    const tournaments = history.filter((g) => g.kind === 'class' && g.type === 'tournament');
+    if (history.length) renderGameHistory(body, games, rounds, classes, pairGames, tournaments);
 
     // Lifetime times tables for everyone who has answered anything, in games or practice
     const names = new Map();
     for (const g of games) for (const p of g.players) if (!p.cpu) names.set(Progress.playerKey(p.name), p.name);
     for (const p of factPlayers) if (!names.has(Progress.playerKey(p.name))) names.set(Progress.playerKey(p.name), p.name);
-    body.append(make('h3', 'stats-heading', 'Times tables'));
+    body.append(make('h3', 'stats-heading centered', 'Times Table'));
     body.append(renderFactLegend());
     for (const name of names.values()) {
       const facts = playerFacts(name);
@@ -2304,7 +2544,7 @@
       body.append(renderPractice(label ? `${label}: facts to practice` : 'Facts to practice', 'var(--line)', toPractice, none));
     }
 
-    if (games.length || classes.length) renderRecentGames(body, [...games, ...classes].sort((a, b) => a.at - b.at));
+    if (games.length || classes.length || pairGames.length || tournaments.length) renderRecentGames(body, [...games, ...classes, ...pairGames, ...tournaments].sort((a, b) => a.at - b.at));
   }
 
   // Tiles and the per-player table (finished games only).
@@ -2333,7 +2573,7 @@
 
   // Tiles, then one row per game type (mode · board · difficulty), per practice
   // type and per classroom game type.
-  function renderGameHistory(body, games, rounds, classes) {
+  function renderGameHistory(body, games, rounds, classes, pairGames, tournaments) {
     const vs = games
       .filter((g) => g.vsComputer && g.players.some((p) => !p.cpu))
       .map((g) => g.players.find((p) => !p.cpu).result);
@@ -2344,10 +2584,10 @@
       t.append(make('span', 'tile-value', value), make('span', 'tile-label', label));
       return t;
     };
-    const played = games.length + classes.length; // class games are games too
+    const played = games.length + classes.length + pairGames.length + tournaments.length; // class games are games too
     tiles.append(
       tile(`${played}${rounds.length ? ` + ${rounds.length}` : ''}`, rounds.length ? 'games + practice rounds' : 'games played'),
-      tile(formatDuration([...games, ...rounds, ...classes].reduce((s, g) => s + g.duration, 0)), 'time played'),
+      tile(formatDuration([...games, ...rounds, ...classes, ...pairGames].reduce((s, g) => s + g.duration, 0)), 'time played'),
       tile(vs.length ? `${count('win')}–${count('loss')}–${count('tie')}` : '—', 'vs CPU (W–L–T)')
     );
     body.append(tiles);
@@ -2427,6 +2667,50 @@
       body.append(make('h3', 'stats-heading', 'Classroom'));
       body.append(statsTable(['', 'Games', 'Best place', 'Best score', 'Right 1st try', 'Avg answer'], rows));
     }
+
+    if (pairGames.length) {
+      const groups = new Map();
+      for (const g of pairGames) {
+        const key = `${g.size}|${g.difficulty}`;
+        const row = groups.get(key) || { size: g.size, difficulty: g.difficulty, games: 0, wins: 0, best: 0, asked: 0, firstTry: 0, times: [] };
+        row.games++;
+        if (g.result === 'win') row.wins++;
+        row.best = Math.max(row.best, g.score);
+        row.asked += g.answered + g.timeouts;
+        row.firstTry += g.firstTry;
+        row.times.push(...g.times);
+        groups.set(key, row);
+      }
+      const rows = [...groups.values()]
+        .sort((a, b) => a.size - b.size || DIFFICULTY_ORDER[a.difficulty] - DIFFICULTY_ORDER[b.difficulty])
+        .map((r) => ({
+          title: 'Pairs',
+          sub: `${r.size}×${r.size} · ${DIFFICULTY_NAMES[r.difficulty]}`,
+          values: [r.games, r.wins, r.best, percent(r.firstTry, r.asked), avgTime(r.times)],
+        }));
+      body.append(make('h3', 'stats-heading', 'Classroom: pairs'));
+      body.append(statsTable(['', 'Games', 'Wins', 'Best score', 'Right 1st try', 'Avg answer'], rows));
+    }
+
+    if (tournaments.length) {
+      const groups = new Map();
+      for (const g of tournaments) {
+        const row = groups.get(g.format) || { format: g.format, played: 0, titles: 0, best: null, wins: 0, losses: 0 };
+        row.played++;
+        if (g.place === 1) row.titles++;
+        if (!row.best || g.place < row.best.place) row.best = g;
+        row.wins += g.wins;
+        row.losses += g.losses;
+        groups.set(g.format, row);
+      }
+      const rows = [...groups.values()].map((r) => ({
+        title: 'Tournament',
+        sub: TOURNAMENT_NAMES[r.format] || r.format,
+        values: [r.played, r.titles, `${ordinal(r.best.place)} of ${r.best.of}`, `${r.wins}–${r.losses}`],
+      }));
+      body.append(make('h3', 'stats-heading', 'Classroom: tournaments'));
+      body.append(statsTable(['', 'Played', 'Titles', 'Best finish', 'Games W–L'], rows));
+    }
   }
 
   function renderRecentGames(body, history) {
@@ -2435,6 +2719,20 @@
     for (const g of history.slice(-10).reverse()) {
       const li = make('li');
       const when = new Date(g.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      if (g.kind === 'class' && g.type === 'tournament') {
+        li.append(make('span', 'meta', `${when} · Class ${g.code} · ${TOURNAMENT_NAMES[g.format] || 'Tournament'}`));
+        li.append(document.createTextNode(`${g.name} ${g.wins}–${g.losses} · `));
+        li.append(make('span', 'winner', g.place === 1 ? '🏆 Champion' : `${ordinal(g.place)} of ${g.of} · 🏆 ${g.champion}`));
+        recent.append(li);
+        continue;
+      }
+      if (g.kind === 'class' && g.type === 'pairs') {
+        li.append(make('span', 'meta', `${when} · Class ${g.code} pairs · ${g.size}×${g.size}`));
+        li.append(document.createTextNode(`${g.name} ${g.score} – ${g.opponent} ${g.opponentScore} · `));
+        li.append(make('span', 'winner', g.result === 'win' ? `🏆 ${g.name}` : g.result === 'tie' ? 'Tie' : `🏆 ${g.opponent}`));
+        recent.append(li);
+        continue;
+      }
       if (g.kind === 'class') {
         li.append(make('span', 'meta', `${when} · Class ${g.code} · ${g.size}×${g.size}`));
         li.append(document.createTextNode(`${g.name} ${g.score} · `));
@@ -2508,6 +2806,8 @@
     season: (r) => `In the shop in ${r.when}`,
     points: (r) => `Need ${formatPoints(r.missing)} more`,
     requires: (r) => `Unlock ${Progress.shopItem(r.requires).name.split(':')[0]} first`,
+    win: (r) => `Win a game on ${r.size}×${r.size} first`,
+    master: (r) => `Master your Times Table up to ${r.size} × ${r.size} first`,
   };
 
   // Opened from a results screen, the Shop / Wardrobe / Stickers show only what
@@ -2575,7 +2875,11 @@
         el.shopBody.append(make('h3', 'stats-heading', group));
       }
       const row = make('div', 'shop-item' + (item.id === highlight ? ' highlight' : ''));
-      row.append(make('span', 'shop-name', item.name));
+      const hiddenStep = !Progress.isUnlocked(progress, item.id) && Progress.isHidden(progress, item.id);
+      if (hiddenStep) row.classList.add('skeleton-row');
+      const name = make('span', 'shop-name', hiddenStep ? 'Locked' : item.name);
+      if (!hiddenStep && item.perk) name.append(make('span', 'shop-perk', `🎁 ${item.perk}`));
+      row.append(name);
       const owned = Progress.isUnlocked(progress, item.id);
       if (owned) {
         row.classList.add('owned');
@@ -2590,7 +2894,12 @@
         btn.dataset.cost = item.price;
         btn.disabled = !check.ok;
         row.append(btn);
-        if (!check.ok) row.append(make('span', 'shop-why', BUY_REASONS[check.reason](check)));
+        if (hiddenStep) {
+          btn.replaceChildren(icon('lock'));
+          btn.setAttribute('aria-label', 'Locked');
+          const earn = Progress.canBuy(progress, item.id);
+          row.append(make('span', 'shop-why', earn.reason === 'win' ? `Win a game on ${earn.size}×${earn.size} to reveal it` : earn.reason === 'master' ? `Master your Times Table up to ${earn.size} × ${earn.size} to reveal it (${earn.mastered} of ${earn.need})` : 'Unlock the one before it first'));
+        } else if (!check.ok) row.append(make('span', 'shop-why', BUY_REASONS[check.reason](check)));
       }
       el.shopBody.append(row);
     }
@@ -2646,6 +2955,7 @@
     toast(`🔓 Unlocked: ${item.name}`, `-${formatPoints(item.price)} points`);
     celebrate(Progress.awardAchievements(progress, { event: 'buy' }));
     saveProgress();
+    refreshAvailableFilters();
     if (!el.shopDialog.hidden) renderShop(item.id);
     syncSettingsUI();
     syncBoardLocks();
@@ -2656,16 +2966,61 @@
     return true;
   }
 
+  // After a purchase, "Available" lists catch up: newly revealed tiers appear,
+  // things you can't afford any more go, and what you've bought stays (✓ Unlocked).
+  function refreshAvailableFilters() {
+    if (shopFilter) {
+      const bought = [...shopFilter].filter((id) => Progress.isUnlocked(progress, id));
+      shopFilter = new Set([...shopAvailable(), ...bought]);
+    }
+    if (wardrobeFilter) {
+      const owned = [...wardrobeFilter].filter((key) => {
+        const [cat, opt] = key.split(':');
+        return cat === 'title' || Progress.isUnlocked(progress, Cosmetics.itemFor(cat, opt));
+      });
+      wardrobeFilter = new Set([...wardrobeAvailable(), ...owned]);
+    }
+  }
+
   // ---- quick unlock: tapping a locked thing asks "Unlock X for 🪙 N?" (no whole shop)
 
   let unlockAsk = null; // { item, el }
+
+  // What to do to reveal a locked board or difficulty.
+  function revealHint(r) {
+    if (r.reason === 'win') return `Win a game against the CPU on the ${r.size}×${r.size} board to reveal the next board.`;
+    const extra = r.practice ? ` and get the ${r.practice} ${r.practice === 1 ? 'fact' : 'facts'} that need practice back on track` : '';
+    const which = r.faces ? `using ${tablesLabel(r.faces)}` : `up to ${r.size} × ${r.size}`;
+    return `Master ${r.need} of the ${r.total} facts ${which} on your Times Table${extra} to reveal the next difficulty. You have ${r.mastered} so far. Practice helps!`;
+  }
 
   function confirmUnlock(itemId, sourceEl) {
     let item = Progress.shopItem(itemId);
     const check = Progress.canBuy(progress, itemId);
     let offer = check.ok;
     let message;
-    if (check.reason === 'requires') {
+    if (Progress.isHidden(progress, itemId)) {
+      // a locked placeholder: offer the next step, without saying what this one is
+      item = Progress.shopItem(Progress.nextInChain(progress, itemId));
+      const next = Progress.canBuy(progress, item.id);
+      if (next.reason === 'win' || next.reason === 'master') {
+        // earned, not bought: a win on the board before, or knowing the times table
+        unlockAsk = null;
+        el.unlockTitle.textContent = '🔒 Locked';
+        el.unlockPrice.textContent = '';
+        el.unlockMessage.textContent = revealHint(next);
+        el.unlockMessage.hidden = false;
+        el.unlockYes.hidden = true;
+        el.unlockNo.textContent = 'OK';
+        el.unlockDialog.hidden = false;
+        el.unlockNo.focus();
+        return;
+      }
+      offer = next.ok;
+      message = 'Unlock this first to see what comes next.';
+      if (next.reason === 'points') message += ` You need ${formatPoints(next.missing)} more points for it.`;
+      sourceEl = null;
+    } else if (check.reason === 'requires') {
       // offer the thing that has to come first
       const first = Progress.shopItem(check.requires);
       const firstCheck = Progress.canBuy(progress, first.id);
@@ -2682,8 +3037,10 @@
     unlockAsk = offer ? { item, el: sourceEl } : null;
     el.unlockTitle.textContent = offer ? `Unlock ${item.name}?` : item.name;
     el.unlockPrice.textContent = `🪙 ${formatPoints(item.price)} · you have ${formatPoints(progress.wallet)}`;
-    el.unlockMessage.textContent = message || '';
-    el.unlockMessage.hidden = !message;
+    // what it gives you (e.g. the bonus for finishing longer practice rounds)
+    const perk = offer && item.perk ? `🎁 ${item.perk}` : '';
+    el.unlockMessage.textContent = [perk, message].filter(Boolean).join(' ');
+    el.unlockMessage.hidden = !perk && !message;
     el.unlockYes.hidden = !offer;
     if (offer) el.unlockYes.textContent = `Unlock for 🪙 ${formatPoints(item.price)}`;
     el.unlockNo.textContent = offer ? 'Cancel' : 'OK';
@@ -2784,12 +3141,34 @@
     players3: () => (tap('[data-mode="multi"]'), tap('#multi-kind [data-kind="local"]'), tap('#player-count [data-count="3"]')),
     players4: () => (tap('[data-mode="multi"]'), tap('#multi-kind [data-kind="local"]'), tap('#player-count [data-count="4"]')),
     practice: () => tap('[data-mode="practice"]'),
-    practiceExpert: () => (tap('[data-mode="practice"]'), tap('#practice-level [data-level="expert"]')),
+    ...Object.fromEntries(Progress.DIFFICULTIES.map((d) => [Progress.practiceExpertId(d), () => (tap('[data-mode="practice"]'), tap('#practice-level [data-level="expert"]'))])),
+    ...Object.fromEntries(
+      Progress.DIFFICULTIES.flatMap((d) => [
+        [Progress.gameExpertId(d), () => (tap('[data-mode="single"]'), tap('#game-level [data-level="expert"]'))],
+        ...[30, 10, 5].map((secs) => [Progress.gameTimerId(secs, d), () => (tap('[data-mode="single"]'), tap('#game-level [data-level="expert"]'), tap(`#game-timer [data-secs="${secs}"]`))]),
+      ])
+    ),
+    ...Object.fromEntries(
+      Progress.DIFFICULTIES.flatMap((d) => [10, 20].map((n) => [Progress.practiceCountId(n, d), () => (tap('[data-mode="practice"]'), tap(`#practice-count [data-count="${n}"]`))]))
+    ),
+    ...Object.fromEntries(
+      Progress.DIFFICULTIES.flatMap((d) =>
+        [30, 10, 5].map((secs) => [Progress.practiceTimerId(secs, d), () => (tap('[data-mode="practice"]'), tap('#practice-level [data-level="expert"]'), tap(`#practice-timer [data-secs="${secs}"]`))])
+      )
+    ),
+    ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`table${i + 1}`, () => (tap('[data-mode="practice"]'), updatePracticePreview())])),
+    board8: () => tap('#board-size [data-size="8"]'),
+    board10: () => tap('#board-size [data-size="10"]'),
+    board12: () => tap('#board-size [data-size="12"]'),
     board16: () => tap('#board-size [data-size="16"]'),
+    board24: () => tap('#board-size [data-size="24"]'),
     board20: () => tap('#board-size [data-size="20"]'),
     boardCustom: () => tap('#board-size [data-size="custom"]'),
     'difficulty.medium': setOption('difficulty', 'medium'),
     'difficulty.hard': setOption('difficulty', 'hard'),
+    'difficulty.tricky': setOption('difficulty', 'tricky'),
+    'difficulty.master': setOption('difficulty', 'master'),
+    'difficulty.legend': setOption('difficulty', 'legend'),
     diceMode: setOption('diceMode', 'real'),
     autoRoll: setOption('autoRoll', 'auto'),
     fitRolls: setOption('fitRolls', 'always'),
@@ -2844,7 +3223,8 @@
       if (!when) badge.append(icon('lock'));
       row.append(badge);
       const text = make('div', 'achievement-text');
-      text.append(make('strong', null, a.name), make('span', null, a.desc));
+      const secret = a.hidden && !when;
+      text.append(make('strong', null, secret ? '???' : a.name), make('span', null, secret ? 'A secret achievement. Keep exploring!' : a.desc));
       row.append(text);
       row.append(
         make('span', 'achievement-reward', when ? new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : `+${a.reward}`)
@@ -2907,7 +3287,9 @@
   // For "what changed": moving right is progress (so a new fact landing in
   // "needs practice" shows as a step down, not an improvement).
   const STATUS_ORDER = { practice: 0, unseen: 1, learning: 2, mastered: 3 };
-  let practiceRoundSize = 10;
+  let practiceRoundSize = 5;
+  // 5 comes with Practice mode; 10 and 20 are unlocked for each difficulty
+  const countUnlock = (count) => Progress.practiceCountId(Number(count), settings.difficulty);
   let practiceLevel = 'learn'; // 'expert' (shop unlock): no picture, no help button until 2 misses, ×2 bonus
   const EXPERT_BONUS = 2;
   const LEVEL_HELP = {
@@ -2916,13 +3298,41 @@
   };
 
   function renderPracticeLevel() {
-    if (!Progress.isUnlocked(progress, 'practiceExpert') && practiceLevel === 'expert') practiceLevel = 'learn';
+    // Expert is unlocked for each difficulty
+    const expertId = Progress.practiceExpertId(settings.difficulty);
+    if (!Progress.isUnlocked(progress, expertId) && practiceLevel === 'expert') practiceLevel = 'learn';
     for (const btn of el.practiceLevel.querySelectorAll('button')) {
       btn.classList.toggle('selected', btn.dataset.level === practiceLevel);
-      setLockBadge(btn, btn.dataset.level === 'expert' ? 'practiceExpert' : null);
+      setLockBadge(btn, btn.dataset.level === 'expert' ? expertId : null);
     }
     el.practiceLevelHelp.textContent = LEVEL_HELP[practiceLevel];
+    renderPracticeTimer();
   }
+
+  // Expert practice's own timer (Off, then 30 s → 10 s → 5 s from the shop),
+  // unlocked separately for each difficulty
+  let practiceTimerSecs = 0;
+  const timerUnlock = (secs) => (Number(secs) ? Progress.practiceTimerId(Number(secs), settings.difficulty) : null);
+  function renderPracticeTimer() {
+    el.practiceTimerField.hidden = practiceLevel !== 'expert';
+    if (!Progress.isUnlocked(progress, timerUnlock(practiceTimerSecs))) practiceTimerSecs = 0;
+    for (const btn of el.practiceTimer.querySelectorAll('button')) {
+      btn.classList.toggle('selected', Number(btn.dataset.secs) === practiceTimerSecs);
+      setLockBadge(btn, timerUnlock(btn.dataset.secs));
+    }
+    // The timer bonus (Expert doubles it): all of it for an instant answer, none when time runs out
+    const top = (secs) => Progress.TIMER_BONUS_MAX[secs] * EXPERT_BONUS;
+    el.practiceTimerHelp.textContent = practiceTimerSecs
+      ? `⏱️ Answer fast for a timer bonus of up to +${top(practiceTimerSecs)} a question: the quicker, the more. If time runs out, it counts as missed.`
+      : `⏱️ A timer earns a bonus for quick answers: up to +${top(30)} a question with 30 s, +${top(10)} with 10 s, +${top(5)} with 5 s.`;
+  }
+  el.practiceTimer.addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
+    practiceTimerSecs = Number(btn.dataset.secs);
+    renderPracticeTimer();
+  });
 
   el.practiceLevel.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
@@ -2930,6 +3340,7 @@
     if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     practiceLevel = btn.dataset.level;
     renderPracticeLevel();
+    renderPracticeCount(); // Expert doubles the finishing bonus
   });
   const practiceTables = new Set(); // chosen times tables; empty = the whole table
   let practice = null;
@@ -2939,22 +3350,38 @@
     return (progress.facts[Progress.playerKey(name)] || { facts: {} }).facts;
   }
 
-  // Practice table size follows Difficulty: Easy 6, Medium 8, Hard 12.
-  function practiceMax() {
-    return Core.DIFFICULTY_SIDES[settings.difficulty] || 6;
+  // Master difficulty's dice: how often each fact comes up, from the player's
+  // record (like practice: "Needs practice" most, mastered hardly ever).
+  function weakFactWeight(player) {
+    const facts = playerFacts(player ? player.name : 'You');
+    return (a, b) => {
+      const status = Progress.factStatus(facts[Progress.factKey(a, b)]);
+      let weight = Progress.PRACTICE_WEIGHTS[status];
+      if ((a === 1 || b === 1) && status !== 'practice') weight /= 2;
+      return weight;
+    };
   }
 
-  // Chips ×1 … ×max (max comes from Difficulty); choices above max are dropped.
+  // Practice table size follows Difficulty: Easy 6, Medium 8, Hard 12 (and
+  // Tricky, Master and Legend, whose facts are within 12 or one teen × 2–9).
+  function practiceMax() {
+    return Math.min(Core.DIFFICULTY_SIDES[settings.difficulty] || 6, 12);
+  }
+  // The difficulty's table chips: ×1 … ×max, Tricky's hard tables, Legend's ×2 … ×9
+  const practiceChips = () => Progress.practiceSet(settings.difficulty).tables.filter((n) => n <= 12);
+
+  // Chips for the difficulty's tables; choices it doesn't have are dropped.
   function renderPracticeTables() {
-    const max = practiceMax();
-    for (const n of [...practiceTables]) if (n > max) practiceTables.delete(n);
+    const chips = practiceChips();
+    for (const n of [...practiceTables]) if (!chips.includes(n) || !tableUnlocked(n)) practiceTables.delete(n);
     el.practiceTables.innerHTML = '';
-    for (let n = 1; n <= max; n++) {
+    for (const n of chips) {
       const btn = make('button', null, `×${n}`);
       btn.type = 'button';
       btn.dataset.table = n;
       btn.setAttribute('aria-pressed', String(practiceTables.has(n)));
       btn.setAttribute('aria-label', `${n} times table`);
+      setLockBadge(btn, `table${n}`);
       el.practiceTables.append(btn);
     }
   }
@@ -2962,6 +3389,7 @@
   el.practiceTables.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-table]');
     if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     const n = Number(btn.dataset.table);
     if (practiceTables.has(n)) practiceTables.delete(n);
     else practiceTables.add(n);
@@ -2974,22 +3402,34 @@
     return list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0];
   }
 
+  // The tables a round asks about: the ones picked, or else every unlocked one.
+  function practiceTableList() {
+    if (practiceTables.size) return [...practiceTables];
+    return practiceChips().filter(tableUnlocked);
+  }
+
   function updatePracticePreview() {
     if (el.practiceSetup.hidden) return;
     renderPracticeLevel();
+    renderPracticeCount();
     renderPracticeTables();
+    const tables = practiceTableList();
+    el.startBtn.disabled = !tables.length;
+    if (!tables.length) {
+      el.practicePreview.textContent = 'Unlock a times table to practice: tap ×1 to start.';
+      return;
+    }
     const facts = playerFacts(el.practiceName.value.trim() || 'You');
-    const max = practiceMax();
+    const set = Progress.practiceSet(settings.difficulty);
+    const upTo = settings.difficulty === 'legend' ? '11–19' : `up to ${practiceMax()}`;
     const counts = { practice: 0, learning: 0, unseen: 0, mastered: 0 };
     let total = 0;
-    for (let a = 1; a <= max; a++) {
-      for (let b = 1; b <= max; b++) {
-        if (practiceTables.size && !practiceTables.has(a) && !practiceTables.has(b)) continue;
-        counts[Progress.factStatus(facts[Progress.factKey(a, b)])]++;
-        total++;
-      }
+    for (const [a, b] of set.pairs) {
+      if (!(set.bSideOnly ? tables.includes(b) : tables.includes(a) || tables.includes(b))) continue;
+      counts[Progress.factStatus(facts[Progress.factKey(a, b)])]++;
+      total++;
     }
-    const what = practiceTables.size ? `${tablesLabel(practiceTables)} up to ${max} (${total} facts)` : `Your whole table, up to ${max} × ${max}`;
+    const what = practiceTables.size ? `${tablesLabel(practiceTables)} ${upTo} (${total} facts)` : `All your unlocked tables (${tablesLabel(tables)}), ${upTo}`;
     el.practicePreview.textContent =
       `${what}: ${counts.practice} need practice, ${counts.learning} learning, ` +
       `${counts.unseen} not seen yet, ${counts.mastered} mastered.`;
@@ -2998,11 +3438,31 @@
   el.practiceCount.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
+    if (btn.dataset.unlock) return confirmUnlock(btn.dataset.unlock, btn);
     practiceRoundSize = Number(btn.dataset.count);
     selectIn(el.practiceCount, btn);
+    renderPracticeCount();
   });
 
-  function startPractice(name, count, tables = [], expert = false) {
+  function renderPracticeCount() {
+    if (!Progress.isUnlocked(progress, countUnlock(practiceRoundSize))) practiceRoundSize = 5;
+    for (const btn of el.practiceCount.querySelectorAll('button')) {
+      btn.classList.toggle('selected', Number(btn.dataset.count) === practiceRoundSize);
+      setLockBadge(btn, countUnlock(btn.dataset.count));
+    }
+    // The finishing bonus for the chosen length (doubled on Expert)
+    const expert = practiceLevel === 'expert';
+    const bonus = Progress.practiceFinishBonus(practiceRoundSize, expert);
+    const next = practiceRoundSize === 5 ? Progress.practiceFinishBonus(10, expert) : 0;
+    el.practiceCountHelp.textContent = bonus
+      ? `🏁 Finish all ${practiceRoundSize} for +${bonus} bonus points${expert ? ' (doubled on Expert)' : ''}.`
+      : `🏁 Longer rounds earn a finishing bonus: +${next} for 10 questions, +${Progress.practiceFinishBonus(20, expert)} for 20.`;
+  }
+
+  // Times tables are unlocked one by one (×1, then ×2, …)
+  const tableUnlocked = (n) => Progress.isUnlocked(progress, `table${n}`);
+
+  function startPractice(name, count, tables = [], expert = false, timer = 0) {
     stopPracticeTimer();
     cancelContinue();
     stopTimer();
@@ -3010,10 +3470,10 @@
     game = null;
     const max = practiceMax();
     const facts = playerFacts(name);
-    const queue = Progress.pickPracticeFacts(facts, max, count, Math.random, tables);
+    const queue = Progress.pickPracticeFacts(facts, Progress.practiceSet(settings.difficulty), count, Math.random, tables);
     const before = {};
     for (const [a, b] of queue) before[Progress.factKey(a, b)] = Progress.factStatus(facts[Progress.factKey(a, b)]);
-    practice = { name, max, count, tables, expert, startedAt: Date.now(), times: [], queue, index: 0, requeued: new Set(), before, firstTry: 0, answered: 0, streak: 0, bestStreak: 0, points: 0, earned: [], current: null };
+    practice = { name, max, count, tables, expert, timer, startedAt: Date.now(), times: [], queue, index: 0, requeued: new Set(), before, firstTry: 0, answered: 0, streak: 0, bestStreak: 0, points: 0, earned: [], current: null };
     el.startScreen.hidden = true;
     el.gameScreen.hidden = true;
     el.practiceDone.hidden = true;
@@ -3094,6 +3554,7 @@
     if (!q || q.done || q.entry === '') return;
     if (Number(q.entry) === q.area) {
       q.done = true;
+      const timerLeft = prTimer && practice.timer ? { secs: practice.timer, left: prTimer.remaining / prTimer.total } : null;
       stopPracticeTimer();
       practiceLocked(true);
       const ms = performance.now() - q.startedAt - q.pausedMs;
@@ -3103,7 +3564,7 @@
       practice.times.push(Math.round(ms));
       practice.streak = firstTry ? practice.streak + 1 : 0;
       practice.bestStreak = Math.max(practice.bestStreak, practice.streak);
-      const bonus = Progress.answerBonus({ firstTry, ms, streak: practice.streak });
+      const bonus = Progress.answerBonus({ firstTry, ms, streak: practice.streak, timer: timerLeft });
       const multiplier = practice.expert ? EXPERT_BONUS : 1;
       const points = PRACTICE_BASE_POINTS + bonus.total * multiplier;
       practice.points += points;
@@ -3113,7 +3574,8 @@
         toast(`${BONUS_TOASTS[part.label.split(' ')[0]]} ${capitalize(part.label)}`, `+${part.points * multiplier} bonus points${extra}`);
       }
       Progress.recordAnswer(progress, practice.name, { a: q.a, b: q.b, firstTry, correct: true, wrongAnswers: q.wrong, ms });
-      practice.earned.push(...celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: practice.streak, a: q.a, b: q.b, facts: playerFacts(practice.name), size: unlockedTableSize() })));
+      const learned = Progress.learnedAfterHelp(progress, q.a, q.b, firstTry);
+      practice.earned.push(...celebrate(Progress.awardAchievements(progress, { event: 'answer', correct: true, firstTry, ms, streak: practice.streak, a: q.a, b: q.b, facts: playerFacts(practice.name), size: unlockedTableSize(), learned })));
       saveProgress();
       el.prAnswer.className = 'answer-box right';
       el.prFeedback.className = 'math-feedback good';
@@ -3148,6 +3610,9 @@
     const q = practice && practice.current;
     if (!q || q.done || q.helped || practice.expert) return; // Expert gets no help
     q.helped = true;
+    Progress.noteHelp(progress, q.a, q.b);
+    practice.earned.push(...celebrate(Progress.awardAchievements(progress, { event: 'help' })));
+    saveProgress();
     q.counting = true;
     el.prHelp.disabled = true;
     el.prArray.hidden = false; // Expert hides it until now
@@ -3172,16 +3637,22 @@
 
   // Answer timer from Settings; paused while counting or while Settings is open.
   // Only Expert practice is timed; Learn never shows a clock.
+  // "7s", or "4:32" for a minute or more
+  function timerText(ms) {
+    const secs = Math.ceil(ms / 1000);
+    return secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  }
+
   function startPracticeTimer() {
-    const secs = practice.expert ? Number(settings.answerTime) || 0 : 0;
+    const secs = practice.expert ? practice.timer : 0; // Expert practice's own timer
     el.prTimer.hidden = !secs;
     if (!secs) return;
     const q = practice.current;
-    const total = secs * 1000;
+    const total = Progress.timerLength(progress, secs) * 1000;
     prTimer = { total, remaining: total, last: performance.now() };
     const draw = () => {
       const left = Math.max(0, prTimer.remaining);
-      el.prTimerNum.textContent = `${Math.ceil(left / 1000)}s`;
+      el.prTimerNum.textContent = timerText(left);
       el.prTimerFill.style.width = `${(left / total) * 100}%`;
       el.prTimer.classList.toggle('low', left <= 5000);
     };
@@ -3225,6 +3696,13 @@
     el.prBar.style.width = '100%';
     const pr = practice;
     progress.counters.practiceRounds = (progress.counters.practiceRounds || 0) + 1;
+    // Longer rounds earn a finishing bonus (doubled on Expert, like the other bonuses)
+    const finish = Progress.practiceFinishBonus(pr.count, pr.expert);
+    if (finish) {
+      pr.points += finish;
+      Progress.addPoints(progress, finish);
+      toast(`🏁 Finished all ${pr.count} questions!`, `+${finish} bonus points${pr.expert ? ` (×${EXPERT_BONUS} Expert)` : ''}`);
+    }
     recordPracticeRound(pr);
     pr.earned.push(...celebrate(Progress.awardAchievements(progress, { event: 'practice' })));
     saveProgress();
@@ -3235,13 +3713,6 @@
       `${pr.firstTry} of ${pr.count} right first time` +
       (retries ? ` · ${retries} ${retries === 1 ? 'fact' : 'facts'} retried` : '') +
       (pr.bestStreak >= 3 ? ` · best streak ${pr.bestStreak} 🔥` : '');
-    el.pdRewards.innerHTML = '';
-    el.pdRewards.append(make('div', 'reward-points', `🪙 +${pr.points} points · wallet: ${progress.wallet}`));
-    for (const a of pr.earned) {
-      const row = make('div', 'reward-achievement');
-      row.append(make('span', 'achievement-icon', a.icon), make('span', null, `New achievement: ${a.name}`), make('span', 'achievement-reward', `+${a.reward}`));
-      el.pdRewards.append(row);
-    }
 
     // Which facts moved, e.g. "3 × 4: Needs practice → Learning"
     el.pdBody.innerHTML = '';
@@ -3284,7 +3755,7 @@
     if (btn) typePractice(btn.dataset.key);
   });
   el.prHelp.addEventListener('click', practiceHelp);
-  el.pdAgain.addEventListener('click', () => startPractice(practice.name, practice.count, practice.tables, practice.expert));
+  el.pdAgain.addEventListener('click', () => startPractice(practice.name, practice.count, practice.tables, practice.expert, practice.timer));
   el.pdMenu.addEventListener('click', leavePractice);
   // "What changed" and the times table sit behind Show details, like the game results.
   function setPracticeDetailsOpen(open) {
@@ -3315,7 +3786,14 @@
   // Settings an invite can set from the "Make an invite" form (select id = invite-<key>).
   const INVITE_FORM_SETTINGS = ['difficulty', 'placeMode', 'answerTime', 'diceMode', 'autoRoll', 'fitRolls', 'cpuSteps'];
   const INVITE_LABELS = {
-    difficulty: { easy: 'Easy (6-sided dice)', medium: 'Medium (8-sided dice)', hard: 'Hard (12-sided dice)' },
+    difficulty: {
+      easy: 'Easy (6-sided dice)',
+      medium: 'Medium (8-sided dice)',
+      hard: 'Hard (12-sided dice)',
+      tricky: 'Tricky (no easy facts)',
+      master: 'Master (your weakest facts)',
+      legend: 'Legend (teens × 2–9)',
+    },
     placeMode: { draw: 'You draw each rectangle', click: 'Click to place rectangles', auto: 'Rectangles are placed for you' },
     diceMode: { virtual: null, real: 'Roll real dice and tap what you got' },
     cpuSteps: { show: null, instant: 'CPU plays instantly' },
@@ -3592,15 +4070,37 @@
   let classStop = null; // closes the live updates
   let classSeen = false; // got at least one update since connecting
 
-  function openClassJoin(code = '') {
-    const saved = Classroom.session();
+  // The first name used in the last class on this device, to fill in next time
+  const CLASS_NAME_KEY = 'blockout.className';
+  function lastClassName() {
+    try {
+      return localStorage.getItem(CLASS_NAME_KEY) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // fromLink: opened from a join link (QR code or a link posted in the class chat)
+  async function openClassJoin(code = '', fromLink = false) {
     el.classCodeInput.value = code || '';
-    el.classNameInput.value = (saved && saved.name) || '';
+    el.classNameInput.value = lastClassName();
     el.classJoinError.hidden = true;
     el.classJoinForm.hidden = false;
     el.classWait.hidden = true;
     el.classJoin.hidden = false;
-    (code ? el.classNameInput : el.classCodeInput).focus();
+    // With the code and your name filled in, joining is one tap
+    (!code ? el.classCodeInput : el.classNameInput.value ? el.classJoinBtn : el.classNameInput).focus();
+    if (fromLink && code) {
+      try {
+        await Classroom.roomInfo(code);
+      } catch (err) {
+        if (err.code !== 'room') return;
+        el.classJoinError.textContent = 'This class has finished. Ask your teacher for a new link.';
+        el.classJoinError.hidden = false;
+        el.classCodeInput.value = '';
+        el.classCodeInput.focus();
+      }
+    }
   }
 
   el.classJoinOpen.addEventListener('click', () => openClassJoin());
@@ -3623,6 +4123,9 @@
     el.classJoinBtn.disabled = true;
     try {
       const joined = await Classroom.join(code, name);
+      try {
+        localStorage.setItem(CLASS_NAME_KEY, joined.name);
+      } catch (e) {}
       connectClass({ code, id: joined.id, key: joined.key, name: joined.name });
       showClassWaiting(null);
     } catch (err) {
@@ -3662,11 +4165,17 @@
 
   function onClassGone(reason) {
     const wasIn = classSeen;
+    const wasHost = classSession && classSession.host;
     classStop = null;
     classSession = null;
     Classroom.saveSession(null);
     el.classJoin.hidden = true;
-    if (game && game.mode === 'class' && game.phase !== 'over') toMenu();
+    if (wasHost) {
+      // the teacher's own player on the projector page: the host screen handles the rest
+      if (game && game.mode === 'pair') game = null;
+      return;
+    }
+    if (game && (game.mode === 'class' || game.mode === 'pair') && game.phase !== 'over') toMenu();
     if (!wasIn) return; // an old class from last time: just forget it
     if (reason === 'closed') toast('👋 Your teacher closed the class', 'Thanks for playing!');
     else if (reason === 'removed') toast('You’ve left the class', 'Join again with the code if that was a mistake.');
@@ -3675,14 +4184,24 @@
 
   function showClassWaiting(view) {
     el.classWaitName.textContent = classSession.name;
-    el.classWaitText.textContent =
-      view && view.state === 'ended' ? 'That game just finished. Wait here for the next one!' : 'Waiting for your teacher to start the game…';
+    const t = view && view.tournament;
+    el.classWaitText.textContent = t
+      ? tournamentLine(t)
+      : classSession.teacher
+      ? 'You’re the teacher’s player. When there’s an odd number of students, you’ll play the odd one out here.'
+      : view && view.state === 'playing'
+        ? 'That game started without you. You’ll play in the next one!'
+        : view && view.state === 'ended'
+          ? 'That game just finished. Wait here for the next one!'
+          : 'Waiting for your teacher to start the game…';
     el.classJoinForm.hidden = true;
     el.classWait.hidden = false;
     el.classJoin.hidden = false;
   }
 
   function onClassView(view) {
+    if (view.type === 'pairs' || view.type === 'tournament') return onPairView(view);
+    if (view.you.benched) return showClassWaiting(view); // joined after this game started
     const mine = game && game.mode === 'class' && game.classroom.game === view.game;
     if (view.state === 'playing') {
       if (!mine) startClassGame(view);
@@ -3700,14 +4219,24 @@
     showClassWaiting(view);
   }
 
+  // The teacher's settings for everyone in the class (no shop locks); placing is
+  // the student's own choice unless the teacher picked one.
+  function classCfg(s) {
+    return {
+      answerTime: s.answerTime || 0,
+      placeMode: s.placeMode && s.placeMode !== 'choice' ? s.placeMode : settings.placeMode,
+      firstInCorner: false,
+      diceMode: 'virtual',
+    };
+  }
+
   function startClassGame(view) {
     el.classJoin.hidden = true;
     for (const d of document.querySelectorAll('.overlay')) if (d !== el.gameOver) d.hidden = true;
     const you = view.you;
     const { size, difficulty } = view.settings;
     startGame([{ name: you.name, statsName: el.singleName.value.trim() || 'You', cpu: false }], size, 'class', null, {
-      // everyone plays by the same rules; how you place rectangles is up to you
-      cfg: { difficulty, answerTime: 0, firstInCorner: false, diceMode: 'virtual', autoRoll: 'off', fitRolls: 'never' },
+      cfg: { ...classCfg(view.settings), difficulty, autoRoll: 'off', fitRolls: 'never' }, // the teacher rolls
       classroom: { session: classSession, game: view.game, round: 0, reported: true, view },
     });
     // Rejoining mid-game: put your rectangles back and pick up your score.
@@ -3769,9 +4298,338 @@
     const c = game.classroom;
     if (!c || c.reported) return;
     c.reported = true;
+    c.doneTurn = c.round;
     Classroom.sendResult(c.session, { round: c.round, ...result }).catch((err) => {
       if (err.code !== 'stale' && err.code !== 'done') toast('⚠️ Couldn’t send your answer', err.message);
     });
+  }
+
+
+  // ---- pairs: head to head on a shared board, taking turns
+
+  function onPairView(view) {
+    const host = classSession.host; // the teacher playing from the projector screen
+    // (a tournament plays many games: each has its own match id)
+    const sameGame = game && game.mode === 'pair' && game.classroom.game === view.game;
+    const mine = sameGame && (!view.match || game.classroom.matchId === view.match.id);
+    if (view.type === 'tournament') tournamentUpdate(view, sameGame);
+    if (view.match && view.state !== 'lobby') {
+      if (!mine) {
+        if (view.match.over) return host ? updateMyGameButton() : showClassWaiting(view); // joined after it finished
+        startPairGame(view);
+      } else syncPairGame(view);
+      return;
+    }
+    if (sameGame && game.phase === 'over') return; // results stay up until the next game starts
+    if (game && game.mode === 'pair') {
+      if (host) game = null;
+      else toMenu();
+    }
+    if (host) return updateMyGameButton();
+    showClassWaiting(view);
+  }
+
+  function startPairGame(view) {
+    const m = view.match;
+    const me = m.players.findIndex((p) => p.id === view.you.id);
+    if (!classSession.host) {
+      el.classJoin.hidden = true;
+      for (const d of document.querySelectorAll('.overlay')) if (d !== el.gameOver) d.hidden = true;
+    }
+    const defs = m.players.map((p, i) => ({
+      name: p.name,
+      cpu: p.isCpu,
+      ...(i === me ? { statsName: el.singleName.value.trim() || 'You' } : {}),
+    }));
+    const { size, difficulty } = view.settings;
+    startGame(defs, size, 'pair', null, {
+      cfg: { ...classCfg(view.settings), difficulty, autoRoll: view.settings.autoRoll ? 'auto' : 'off' },
+      classroom: { session: classSession, game: view.game, matchId: m.id, me, round: 0, reported: true, doneTurn: 0, synced: 0, passSeen: 0, view },
+    });
+    if (classSession.host && !hostOnGame) showHostView(); // the projector keeps showing the class
+    syncPairGame(view);
+  }
+
+  const opponent = () => game.players[1 - game.classroom.me];
+
+  // Bring the shared board and the turn up to date with the server.
+  function syncPairGame(view) {
+    if (game.phase === 'over') return; // finished (and rewarded) once already
+    const c = game.classroom;
+    const m = view.match;
+    c.view = view;
+    m.players.forEach((sp, i) => Object.assign(game.players[i], { score: sp.score, squares: sp.squares, bonus: sp.bonus }));
+    let note = '';
+    // New rectangles (yours are already on the board)
+    for (const r of m.rects.slice(c.synced)) {
+      if (game.board.rects.some((x) => x.x === r.x && x.y === r.y && x.w === r.w && x.h === r.h)) continue;
+      if (game.pending) {
+        // Can't happen in turn order, but never draw over your own rectangle
+        Core.removeRect(game.board, game.pending.rect);
+        game.pending = null;
+      }
+      const rect = Core.place(game.board, r.x, r.y, r.w, r.h, r.owner);
+      Object.assign(rect, { a: r.a, b: r.b, solved: true });
+      game.lastRect = rect;
+      game.players[r.owner].log.push({ a: r.a, b: r.b, area: rect.area });
+      if (r.owner !== c.me) note = `${game.players[r.owner].name} drew ${r.a} × ${r.b} = ${rect.area}.`;
+    }
+    c.synced = m.rects.length;
+    // Passes
+    if (m.lastPass && m.lastPass.turn > c.passSeen) {
+      c.passSeen = m.lastPass.turn;
+      const who = m.players.findIndex((p) => p.id === m.lastPass.by);
+      const [a, b] = m.lastPass.roll;
+      game.players[who].log.push({ pass: true, a, b });
+      note = who === c.me ? `No room for a ${a} × ${b} anywhere. You pass.` : `${game.players[who].name} had no room for a ${a} × ${b}, so they pass.`;
+    }
+    game.current = m.current;
+    if (m.over) return finishPairGame(view);
+    const myTurn = m.current === c.me;
+    const newTurn = m.turn !== c.round;
+    if (newTurn) c.round = m.turn;
+    if (newTurn && myTurn && ['wait', 'roll'].includes(game.phase)) startPairTurn(note);
+    else if (!myTurn && game.phase === 'wait') {
+      if (m.roll) {
+        renderDie(el.dieA, m.roll[0]);
+        renderDie(el.dieB, m.roll[1]);
+        setMsg(`${opponent().name} rolled ${m.roll[0]} and ${m.roll[1]}…`);
+      } else if (newTurn || note) {
+        renderDie(el.dieA, null);
+        renderDie(el.dieB, null);
+        setMsg(`${note} ${opponent().name}'s turn…`.trim());
+      }
+    }
+    render();
+    updateMyGameButton();
+  }
+
+  function startPairTurn(note = '') {
+    resetTurn();
+    game.classroom.reported = false;
+    game.phase = 'roll';
+    setMsg(`${note} ${game.autoRoll ? 'Your turn! Rolling…' : 'Your turn: roll the dice!'}`.trim());
+    render();
+    if (classSession.host && !hostOnGame) toast('🎲 Your turn', `in your game with ${opponent().name}`);
+    if (game.autoRoll) waitInGame(AUTO_ROLL_MS).then(humanRoll);
+  }
+
+  // After your turn (or at the start): your turn again, or wait for your partner.
+  function pairTurnOrWait() {
+    const c = game.classroom;
+    const m = c.view && c.view.match;
+    if (m && !m.over && m.current === c.me && m.turn === c.round && m.turn !== c.doneTurn) return startPairTurn();
+    game.phase = 'wait';
+    setMsg(m && m.current !== c.me ? `${opponent().name}'s turn…` : 'Waiting…');
+    render();
+  }
+
+  async function pairRoll() {
+    const c = game.classroom;
+    game.phase = 'rolling';
+    render();
+    let res;
+    try {
+      res = await Classroom.roll(c.session);
+    } catch (err) {
+      if (game && game.classroom === c) {
+        game.phase = 'roll';
+        render();
+      }
+      if (err.code !== 'turn' && err.code !== 'stale') toast('⚠️ Couldn’t roll', err.message);
+      return;
+    }
+    if (!game || game.classroom !== c) return;
+    const [a, b] = await rollDice(res.roll);
+    if (res.passed) {
+      c.reported = true;
+      c.doneTurn = c.round;
+      game.phase = 'wait';
+      setMsg(`No room for a ${a} × ${b} anywhere. You pass.`);
+      render();
+      return;
+    }
+    await startPlacing(a, b);
+  }
+
+  function finishPairGame(view) {
+    gameId++;
+    stopTimer();
+    const c = game.classroom;
+    const m = view.match;
+    game.phase = 'over';
+    game.dice = null;
+    game.pending = null;
+    el.math.hidden = true;
+    setMsg('');
+    render();
+    updateMyGameButton();
+    const me = m.players[c.me];
+    const opp = m.players[1 - c.me];
+    const oppName = opp.isTeacher ? 'your teacher' : opp.name;
+    const Opp = oppName[0].toUpperCase() + oppName.slice(1);
+    el.resultTitle.textContent =
+      m.left === opp.id
+        ? `${Opp} left, so you win!`
+        : m.winner === me.id
+          ? `You beat ${oppName}! 🎉`
+          : m.winner === null
+            ? 'It’s a tie!'
+            : `${Opp} wins this time`;
+    const empty = Core.emptyCount(game.board);
+    el.resultSub.textContent = `${me.score} – ${opp.score} · ${empty === 0 ? 'the board is full' : `${empty} squares left empty`}`;
+    el.resultList.innerHTML = '';
+    const top = Math.max(1, me.score, opp.score);
+    for (const [i, p] of [...m.players.entries()].sort((x, y) => y[1].score - x[1].score)) {
+      const li = make('li', i === c.me ? 'result-you' : '');
+      li.style.setProperty('--c', game.players[i].color);
+      const bar = make('span', 'result-bar');
+      const fill = make('span');
+      fill.style.width = `${(p.score / top) * 100}%`;
+      bar.append(fill);
+      li.append(make('span', 'result-name', p.name), make('span', 'result-pts', `${p.score} pts`), bar);
+      el.resultList.append(li);
+    }
+    el.rewards.innerHTML = '';
+    if (c.session.teacher) el.rewards.append(make('p', 'setting-help', 'Thanks for playing! Teacher games don’t count towards stats.'));
+    else if (view.type === 'tournament') {
+      // each tournament game earns its points; the tournament's own rewards come at the end
+      Progress.addPoints(progress, me.score);
+      saveProgress();
+      showRewards([]);
+    } else renderPairRewards(view);
+    if (m.tiebreak) el.resultSub.textContent += m.tiebreak === 'coin' ? ' · a tie, settled by a coin flip' : ' · a tie, won on answers right first time';
+    tournamentUpdate(view, true);
+    if (m.winner === me.id) celebrateWin();
+    renderStats();
+    setDetailsOpen(false);
+    if (c.session.host && !hostOnGame) {
+      toast('🏁 Your game is over', `${me.score} – ${opp.score} against ${opp.name}`);
+      return; // the projector keeps showing the class; the results wait in "My game"
+    }
+    el.gameOver.hidden = false;
+    el.gameOver.querySelector('.dialog').scrollTop = 0;
+  }
+
+  function renderPairRewards(view) {
+    const c = game.classroom;
+    const m = view.match;
+    const me = m.players[c.me];
+    const opp = m.players[1 - c.me];
+    const won = m.winner === me.id;
+    Progress.addPoints(progress, me.score);
+    progress.counters.pairGames = (progress.counters.pairGames || 0) + 1;
+    if (won) progress.counters.pairWins = (progress.counters.pairWins || 0) + 1;
+    const p = game.players[c.me];
+    const asked = p.answered + p.stats.timeouts;
+    const earned = Progress.awardAchievements(progress, {
+      event: 'pair',
+      won,
+      tie: m.winner === null,
+      vsTeacher: opp.isTeacher,
+      vsCpu: opp.isCpu,
+      pairGames: progress.counters.pairGames,
+      pairWins: progress.counters.pairWins || 0,
+      perfect: asked >= 5 && p.firstTry === asked,
+    });
+    grantStickers(earned); // they show up behind the Stickers button
+    saveProgress();
+    const history = loadHistory();
+    history.push({
+      kind: 'class',
+      type: 'pairs',
+      at: Date.now(),
+      duration: Date.now() - game.startedAt,
+      code: view.code,
+      size: view.settings.size,
+      difficulty: view.settings.difficulty,
+      name: me.name,
+      statsName: statsName(p),
+      opponent: opp.isTeacher ? 'Teacher' : opp.name,
+      result: m.winner === null ? 'tie' : won ? 'win' : 'loss',
+      score: me.score,
+      opponentScore: opp.score,
+      answered: p.answered,
+      firstTry: p.firstTry,
+      timeouts: p.stats.timeouts,
+      times: p.stats.times.map(Math.round),
+      missed: p.stats.missed,
+    });
+    saveHistory(history);
+    showRewards(earned);
+    el.rewards.append(make('p', 'setting-help', 'Stay on this screen: your teacher can start another game.'));
+  }
+
+  // ---- tournaments (students): where you stand between games, and the rewards at the end
+
+  function tournamentLine(t) {
+    const record = `${t.wins}–${t.losses}`;
+    switch (t.status) {
+      case 'champion':
+        return `🏆 You won the tournament! (${record})`;
+      case 'finished':
+        return `${t.champion} won the tournament. You finished ${ordinal(t.place)} of ${t.of} (${record}).`;
+      case 'out':
+        return `You’re out of the tournament (${record}). Cheer on the others! 📣`;
+      case 'bye':
+        return 'You have a bye this round: you go straight through! 🎟️';
+      case 'playing':
+        return 'Your game is on!';
+      default:
+        return t.line ? `You’re number ${t.line} in line for the hill 👑 (${record})` : `Next round starting soon… (${record})`;
+    }
+  }
+
+  let tournamentRewarded = null; // `${code}:${game}` once its rewards are given
+
+  // Every update: keep the line under your last result up to date, and give the
+  // tournament's rewards once it's over.
+  function tournamentUpdate(view, sameGame) {
+    const t = view.tournament;
+    if (!t) return;
+    if (sameGame && game.phase === 'over') {
+      el.resultTournament.textContent = tournamentLine(t);
+      el.resultTournament.hidden = false;
+    }
+    if (!el.classWait.hidden && !el.classJoin.hidden) el.classWaitText.textContent = tournamentLine(t);
+    const key = `${view.code}:${view.game}`;
+    if (view.state !== 'ended' || classSession.teacher || tournamentRewarded === key) return;
+    tournamentRewarded = key;
+    progress.counters.tournaments = (progress.counters.tournaments || 0) + 1;
+    if (t.status === 'champion') progress.counters.tournamentWins = (progress.counters.tournamentWins || 0) + 1;
+    celebrate(
+      Progress.awardAchievements(progress, {
+        event: 'tournament',
+        place: t.place,
+        of: t.of,
+        champion: t.status === 'champion',
+        undefeated: t.losses === 0 && t.wins > 0,
+        upsets: t.upsets,
+        bestStreak: t.bestStreak,
+        tournaments: progress.counters.tournaments,
+        titles: progress.counters.tournamentWins || 0,
+      })
+    );
+    saveProgress();
+    const history = loadHistory();
+    history.push({
+      kind: 'class',
+      type: 'tournament',
+      at: Date.now(),
+      duration: 0,
+      code: view.code,
+      size: view.settings.size,
+      difficulty: view.settings.difficulty,
+      format: view.settings.format,
+      name: classSession.name,
+      place: t.place,
+      of: t.of,
+      wins: t.wins,
+      losses: t.losses,
+      champion: t.champion,
+    });
+    saveHistory(history);
+    if (t.status === 'champion') celebrateWin();
   }
 
   function finishClassGame(view) {
@@ -3839,10 +4697,10 @@
       missed: you.missed,
       rolls: view.round,
     });
-    const stickers = grantStickers(earned);
+    grantStickers(earned); // they show up behind the Stickers button
     saveProgress();
     recordClassGame(view, p);
-    appendRewards(you.score, earned, stickers);
+    showRewards(earned);
     el.rewards.append(make('p', 'setting-help', 'Stay on this screen: your teacher can start another game.'));
   }
 
@@ -3875,7 +4733,6 @@
   let host = null; // { code, teacherKey, lan }
   let hostStop = null;
   let hostView = null;
-  let hostSetupMode = 'create'; // or 'change' (settings of a class that's waiting)
 
   function segValue(group) {
     return group.querySelector('.selected').dataset.value;
@@ -3883,40 +4740,45 @@
   function setSeg(group, value) {
     for (const b of group.querySelectorAll('button')) b.classList.toggle('selected', b.dataset.value === String(value));
   }
-  for (const group of [el.hostSize, el.hostDifficulty, el.hostRounds]) {
+  for (const group of [el.hostType, el.hostSize, el.hostDifficulty, el.hostRounds]) {
     group.addEventListener('click', (e) => {
       const b = e.target.closest('button');
-      if (b) setSeg(group, b.dataset.value);
+      if (!b) return;
+      setSeg(group, b.dataset.value);
+      if (group === el.hostType) renderHostType();
     });
   }
 
-  function openHostSetup(mode) {
-    hostSetupMode = mode;
-    const s = mode === 'change' && hostView ? hostView.settings : null;
-    if (s) {
-      setSeg(el.hostSize, s.size);
-      setSeg(el.hostDifficulty, s.difficulty);
-      setSeg(el.hostRounds, s.rounds);
-    }
-    el.hostSetupTitle.textContent = mode === 'change' ? 'Game settings' : 'Host a class';
-    el.hostCreate.textContent = mode === 'change' ? 'Save' : 'Create class';
+  // Game type: the whole class on one leaderboard, or head to head in pairs.
+  const HOST_TYPE_HELP = {
+    class: 'Everyone plays the same rolls on their own board, and the whole class shares one leaderboard.',
+    pairs: 'Students are matched in twos and play head to head on a shared board, taking turns. With an odd number, the odd one out plays you or the CPU.',
+    tournament: 'Short head-to-head games in a knockout, round robin, Swiss or king-of-the-hill tournament, with the bracket on your screen. Choose the format in the lobby.',
+  };
+  function renderHostType() {
+    const type = segValue(el.hostType);
+    for (const b of el.hostType.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.value === type));
+    el.hostTypeHelp.textContent = HOST_TYPE_HELP[type];
+    el.hostRounds.closest('.field').hidden = type !== 'class'; // pairs and tournament games run by turns
+    if (type === 'tournament' && segValue(el.hostSize) === '12') setSeg(el.hostSize, 8); // many short games: a small board
+  }
+
+  // Creating a class. Everything here (and more) can be changed in the lobby too.
+  function openHostSetup() {
+    renderHostType();
     el.hostError.hidden = true;
     el.hostSetup.hidden = false;
     el.hostCreate.focus();
   }
 
-  el.classHostOpen.addEventListener('click', () => openHostSetup('create'));
-  el.hostChange.addEventListener('click', () => openHostSetup('change'));
+  el.classHostOpen.addEventListener('click', openHostSetup);
   el.hostCancel.addEventListener('click', () => (el.hostSetup.hidden = true));
   el.hostCreate.addEventListener('click', async () => {
     const chosen = { size: Number(segValue(el.hostSize)), difficulty: segValue(el.hostDifficulty), rounds: Number(segValue(el.hostRounds)) };
     el.hostCreate.disabled = true;
     try {
-      if (hostSetupMode === 'change') await Classroom.teacher(host, 'settings', { settings: chosen });
-      else {
-        const room = await Classroom.createRoom(chosen);
-        connectHost({ code: room.code, teacherKey: room.teacherKey, lan: room.lan });
-      }
+      const room = await Classroom.createRoom({ ...chosen, type: segValue(el.hostType) });
+      connectHost({ code: room.code, teacherKey: room.teacherKey, lan: room.lan });
       el.hostSetup.hidden = true;
     } catch (err) {
       el.hostError.textContent = err.message;
@@ -3940,6 +4802,16 @@
 
   function hostGone(reason) {
     const had = Boolean(hostView);
+    if (classSession && classSession.host) {
+      if (classStop) classStop();
+      classStop = null;
+      classSession = null;
+      Classroom.saveSession(null);
+      if (game && game.mode === 'pair') game = null;
+    }
+    hostOnGame = false;
+    el.gameScreen.hidden = true;
+    el.gameOver.hidden = true;
     hostStop = null;
     host = null;
     hostView = null;
@@ -3965,6 +4837,51 @@
     return { base, full: `${base}#class=${code}`, local: local && !(host.lan && host.lan.length) };
   }
 
+  // ---- teacher: links to post in the class chat
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      // Older browsers or no permission: copy from a hidden text box
+      const box = document.createElement('textarea');
+      box.value = text;
+      box.setAttribute('readonly', '');
+      box.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+      document.body.append(box);
+      box.select();
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (err) {}
+      box.remove();
+      return ok;
+    }
+  }
+
+  async function copyWithFeedback(btn, text) {
+    const label = btn.innerHTML;
+    const ok = await copyText(text);
+    btn.classList.add('copied');
+    btn.textContent = ok ? '✓ Copied!' : 'Couldn’t copy';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = label;
+    }, 1600);
+  }
+
+  const joinMessage = (code) => `Join our Blockout class! Tap this link: ${joinUrl(code).full} (class code ${code})`;
+
+  el.hostCopyLink.addEventListener('click', () => hostView && copyWithFeedback(el.hostCopyLink, joinUrl(hostView.code).full));
+  el.hostCopyMsg.addEventListener('click', () => hostView && copyWithFeedback(el.hostCopyMsg, joinMessage(hostView.code)));
+  el.hostShareBtn.hidden = !navigator.share;
+  el.hostShareBtn.addEventListener('click', () => {
+    if (!hostView) return;
+    navigator.share({ title: 'Blockout class', text: joinMessage(hostView.code), url: joinUrl(hostView.code).full }).catch(() => {});
+  });
+  el.hostCopyTeacher.addEventListener('click', () => hostView && copyWithFeedback(el.hostCopyTeacher, `${joinUrl(hostView.code).base}#class=${hostView.code}&play=${hostView.playKey}`));
+
   function renderHost(view) {
     const first = !hostView;
     hostView = view;
@@ -3982,9 +4899,31 @@
         drawQr(el.hostQr, url.full);
         el.hostQr.dataset.url = url.full;
       }
-      el.hostSettings.textContent = `${s.size}×${s.size} board · ${DIFFICULTY_NAMES[s.difficulty]} (${DIFFICULTY_SIDES_TEXT[s.difficulty]}) · ${s.rounds} rolls`;
-      el.hostStartBtn.disabled = !view.players.length;
-      el.hostStartBtn.textContent = view.players.length ? `Start game (${view.players.length} ${view.players.length === 1 ? 'player' : 'players'})` : 'Waiting for players to join…';
+      const pairs = view.type === 'pairs';
+      renderHostSettings(view);
+      el.hostPairs.hidden = !pairs;
+      const n = view.players.length;
+      el.hostStartBtn.disabled = !n;
+      el.hostStartBtn.textContent = n ? `Start game (${n} ${n === 1 ? 'player' : 'players'})` : 'Waiting for players to join…';
+      if (view.type === 'tournament') {
+        el.hostStartBtn.disabled = n < 2;
+        el.hostStartBtn.textContent = n >= 2 ? `Start the tournament (${n} players)` : 'A tournament needs at least 2 players…';
+      }
+      if (pairs) renderHostPairsLobby(view);
+    } else if (view.state === 'playing' && view.type === 'tournament') {
+      const t = view.tournament;
+      renderHostMatches(view, el.hostMatches);
+      renderTournament(t, el.hostTournament);
+      const kothPlayed = t.hills.reduce((n, h) => n + h.played, 0);
+      const kothTotal = t.hills.reduce((n, h) => n + h.limit, 0);
+      el.hostRound.textContent = t.format === 'koth' ? `King of the hill · ${kothPlayed} of ${kothTotal} games` : `${TOURNAMENT_NAMES[t.format]} · ${t.label}`;
+      el.hostNextBtn.replaceChildren(icon('chevron-right'), t.format === 'koth' ? ' Next games' : ' Next round');
+      el.hostNextBtn.disabled = !t.roundReady;
+      el.hostAuto.checked = view.autoNext;
+    } else if (view.state === 'playing' && view.type === 'pairs') {
+      renderHostMatches(view, el.hostMatches);
+      const done = view.matches.filter((m) => m.over).length;
+      el.hostRound.textContent = `Pairs · ${done} of ${view.matches.length} ${view.matches.length === 1 ? 'game' : 'games'} finished`;
     } else if (view.state === 'playing') {
       const [a, b] = view.roll;
       const sides = Core.DIFFICULTY_SIDES[s.difficulty];
@@ -3999,10 +4938,314 @@
     } else {
       renderHostResults(view);
     }
+    // whole class: dice and pacing; pairs: one card per pair; tournament: the bracket too
+    const pairsPlaying = view.type !== 'class';
+    const tourney = view.type === 'tournament';
+    for (const node of [el.hostDice, el.hostRollText, el.hostProgress]) node.hidden = pairsPlaying;
+    el.hostNextBtn.hidden = el.hostAutoLabel.hidden = view.type === 'pairs' || (tourney && view.tournament && view.tournament.format === 'koth');
+    el.hostAutoLabel.lastChild.textContent = tourney ? ' Start the next round by itself' : ' Roll again by itself when everyone’s done';
+    el.hostMatches.hidden = !pairsPlaying;
+    el.hostTournament.hidden = !tourney || view.state !== 'playing';
+    el.hostPodium.hidden = view.type === 'pairs';
+    el.hostMatchResults.hidden = view.type !== 'pairs';
+    el.hostTournamentFinal.hidden = !tourney || view.state !== 'ended';
     renderHostRoster(view);
+    updateMyGameButton();
   }
 
+  // ---- teacher: game settings in the lobby, for the whole class and free of shop locks
+
+  // [value, label, detail]; `only` limits a setting to one game type
+  const HOST_SETTINGS = [
+    { key: 'size', label: 'Board size', options: [6, 8, 10, 12, 16, 20, 24].map((n) => [n, `${n}×${n}`]) },
+    { key: 'difficulty', label: 'Difficulty', options: [['easy', 'Easy', '6-sided dice'], ['medium', 'Medium', '8-sided dice'], ['hard', 'Hard', '12-sided dice']] },
+    {
+      key: 'format',
+      label: 'Tournament format',
+      only: ['tournament'],
+      wide: true,
+      options: [
+        ['knockout', 'Knockout', 'lose once and you’re out'],
+        ['double', 'Double knockout', 'out after 2 losses'],
+        ['roundrobin', 'Round robin', 'everyone plays everyone'],
+        ['swiss', 'Swiss', 'set rounds, no knockouts'],
+        ['koth', 'King of the hill', 'winner stays on'],
+      ],
+    },
+    { key: 'swissRounds', label: 'Swiss rounds', only: ['tournament'], when: (s) => s.format === 'swiss', options: [2, 3, 4, 5].map((n) => [n, String(n)]) },
+    { key: 'kothMatches', label: 'Games per hill', only: ['tournament'], when: (s) => s.format === 'koth', options: [6, 10, 15].map((n) => [n, String(n)]) },
+    { key: 'matchTurns', label: 'Game length', only: ['pairs', 'tournament'], options: [[0, 'Full board'], [12, '6 turns each'], [8, '4 turns each']] },
+    { key: 'rounds', label: 'Rolls in a game', only: ['class'], options: [[10, '10'], [15, '15'], [20, '20']] },
+    { key: 'placeMode', label: 'Placing rectangles', options: [['choice', 'Their choice'], ['draw', 'Draw'], ['click', 'Click'], ['auto', 'Auto', 'fastest']] },
+    { key: 'answerTime', label: 'Time to answer', options: [[0, 'No timer'], [30, '30 s'], [20, '20 s'], [10, '10 s']] },
+    { key: 'autoRoll', label: 'Rolling', only: ['pairs', 'tournament'], options: [[false, 'Tap to roll'], [true, 'Auto roll']] },
+    { key: 'fitRolls', label: 'Only rolls that fit', only: ['pairs', 'tournament'], options: [['end', 'Near the end'], ['always', 'Always'], ['never', 'Never']] },
+    { key: 'cpuSpeed', label: 'CPU speed', only: ['pairs'], options: [['slow', 'Slow'], ['normal', 'Normal'], ['fast', 'Fast']] },
+  ];
+  // "Make it quick": everything that saves time
+  const QUICK_SETTINGS = { placeMode: 'auto', answerTime: 20, autoRoll: true, fitRolls: 'always', cpuSpeed: 'fast', matchTurns: 12 };
+
+  function renderHostSettings(view) {
+    const grid = el.hostSettingsGrid;
+    if (!grid.children.length) {
+      for (const def of HOST_SETTINGS) {
+        const field = make('div', 'field' + (def.wide ? ' wide' : ''));
+        field.append(make('span', null, def.label));
+        const seg = make('div', 'segmented');
+        seg.dataset.key = def.key;
+        for (const [value, label, detail] of def.options) {
+          const b = make('button', null, label);
+          b.type = 'button';
+          b.dataset.value = JSON.stringify(value);
+          if (detail) b.append(' ', make('small', null, detail));
+          seg.append(b);
+        }
+        field.append(seg);
+        grid.append(field);
+      }
+    }
+    HOST_SETTINGS.forEach((def, i) => {
+      grid.children[i].hidden = (def.only && !def.only.includes(view.type)) || (def.when && !def.when(view.settings));
+    });
+    for (const seg of grid.querySelectorAll('.segmented')) {
+      const current = JSON.stringify(view.settings[seg.dataset.key]);
+      for (const b of seg.querySelectorAll('button')) b.classList.toggle('selected', b.dataset.value === current);
+    }
+    const quick = Object.entries(QUICK_SETTINGS).every(([k, v]) => view.settings[k] === v || (k === 'cpuSpeed' && view.type !== 'pairs') || (['autoRoll', 'fitRolls', 'cpuSpeed', 'matchTurns'].includes(k) && view.type === 'class'));
+    el.hostQuick.disabled = quick;
+  }
+
+  el.hostSettingsGrid.addEventListener('click', (e) => {
+    const b = e.target.closest('.segmented button');
+    if (!b) return;
+    const key = b.closest('.segmented').dataset.key;
+    hostAction('settings', { settings: { [key]: JSON.parse(b.dataset.value) } });
+  });
+  el.hostQuick.addEventListener('click', () => hostAction('settings', { settings: QUICK_SETTINGS }));
+
+  // ---- teacher: tournaments on the projector
+
+  const TOURNAMENT_NAMES = { knockout: 'Knockout', double: 'Double knockout', roundrobin: 'Round robin', swiss: 'Swiss', koth: 'King of the hill' };
+
+  // Knockouts: the bracket, a column per round. Other formats: the standings
+  // table (and, for king of the hill, each hill's king and line).
+  function renderTournament(t, box) {
+    box.innerHTML = '';
+    if (t.format === 'koth') {
+      const hills = make('div', 'koth-hills');
+      for (const h of t.hills) {
+        const card = make('div', 'koth-hill');
+        card.append(make('div', 'koth-title', t.hills.length > 1 ? `Hill ${h.id}` : 'The hill'));
+        card.append(make('div', 'koth-king', h.king ? `👑 ${h.king}` : '👑 …'));
+        if (h.streak > 1) card.append(make('div', 'koth-streak', `🔥 ${h.streak} wins in a row`));
+        card.append(make('div', 'koth-queue', h.queue.length ? `Next: ${h.queue.join(', ')}` : ''));
+        card.append(make('div', 'koth-count', `${h.played} of ${h.limit} games`));
+        hills.append(card);
+      }
+      box.append(hills);
+    }
+    if (t.format === 'knockout' || t.format === 'double') {
+      const cols = make('div', 'bracket');
+      for (const r of t.rounds) {
+        const col = make('div', 'bracket-round');
+        col.append(make('div', 'bracket-label', r.label));
+        for (const m of r.matches) {
+          const game = make('div', 'bracket-match');
+          for (const name of [m.a, m.b]) game.append(make('div', 'bracket-name' + (name === m.winner ? ' winner' : ' loser'), name));
+          col.append(game);
+        }
+        for (const name of r.byes) col.append(make('div', 'bracket-bye', `${name}: bye`));
+        cols.append(col);
+      }
+      box.append(cols);
+    }
+    if (t.format !== 'knockout') {
+      const table = make('table', 'standings');
+      const head = table.createTHead().insertRow();
+      for (const h of ['', 'Name', 'W', 'L', t.format === 'koth' ? 'Best streak' : 'Points']) head.append(make('th', null, h));
+      const body = table.createTBody();
+      for (const x of t.standings) {
+        const tr = body.insertRow();
+        if (x.out) tr.className = 'out';
+        tr.append(make('td', null, ordinal(x.place)), make('td', null, x.name), make('td', null, String(x.wins)), make('td', null, String(x.losses)), make('td', null, String(t.format === 'koth' ? x.bestStreak : x.points)));
+      }
+      box.append(table);
+    }
+  }
+
+  function renderTournamentPodium(t) {
+    el.hostPodium.innerHTML = '';
+    const medals = ['🥇', '🥈', '🥉'];
+    for (const x of t.standings.filter((s) => s.place <= 3).slice(0, 4)) {
+      const li = make('li', `podium-${x.place}`);
+      li.append(make('span', 'podium-medal', medals[x.place - 1]), make('span', 'podium-name', x.name), make('span', 'podium-score', `${x.wins}–${x.losses}`));
+      el.hostPodium.append(li);
+    }
+  }
+
+  function renderTournamentRoster(view) {
+    const t = view.tournament;
+    el.hostRosterTitle.textContent = t.over ? 'Final standings' : 'Standings';
+    el.hostRoster.innerHTML = '';
+    el.hostRoster.classList.add('ranked');
+    const byId = new Map(view.players.map((p) => [p.id, p]));
+    const playingNow = new Set(view.matches.filter((m) => !m.over).flatMap((m) => m.players.map((p) => p.id)));
+    for (const x of t.standings) {
+      const p = byId.get(x.id);
+      const li = make('li', (p && !p.connected ? 'offline ' : '') + (x.out ? 'knocked-out' : ''));
+      li.append(make('span', 'host-rank', ordinal(x.place)), make('span', 'host-name', x.name), make('span', 'host-score', `${x.wins}–${x.losses}`));
+      li.append(make('span', 'host-status', !p ? '👋' : t.over ? (x.place === 1 ? '🏆' : '') : !p.connected ? '📴' : playingNow.has(x.id) ? '🎲' : x.out ? '' : '⏳'));
+      el.hostRoster.append(li);
+    }
+    for (const p of view.waiting || []) {
+      const li = make('li', 'waiting');
+      li.append(make('span', 'host-name', p.name), make('span', 'host-waiting', '⏳ next tournament'));
+      el.hostRoster.append(li);
+    }
+  }
+
+  // ---- teacher: pairs
+
+  const MATCHING_HELP = {
+    shuffle: 'New pairs are drawn when the game starts. Nobody gets last game’s partner if that can be helped.',
+    keep: 'Same pairs as last game. Anyone new is paired up at the end.',
+    arrange: 'Tap two names to swap them between pairs.',
+  };
+  let swapPick = null; // arranging pairs: the first name tapped
+
+  function renderHostPairsLobby(view) {
+    // Only "on this screen" plays from this page; otherwise let go of the teacher's
+    // player here (another device or the CPU plays instead).
+    if (view.pairOptions.odd !== 'screen' && classSession && classSession.host) {
+      if (classStop) classStop();
+      classStop = null;
+      classSession = null;
+      Classroom.saveSession(null);
+      if (game && game.mode === 'pair') game = null;
+    }
+    setSeg(el.hostMatching, view.pairOptions.matching);
+    setSeg(el.hostOdd, view.pairOptions.odd);
+    const n = view.players.length;
+    const odd = view.odd;
+    const who = { screen: 'you, here on this screen', device: 'you, on your other device', cpu: 'the CPU' }[view.pairOptions.odd];
+    el.hostPairsHelp.textContent = `${MATCHING_HELP[view.pairOptions.matching]} ${n ? `${n} ${n === 1 ? 'student' : 'students'}: ` : ''}${odd.needed ? `the odd one out plays ${who}.` : n ? 'everyone has a partner.' : ''}`;
+    // Pairs preview (shuffle mode draws new ones at the start)
+    el.hostPairList.hidden = view.pairOptions.matching === 'shuffle' || !n;
+    el.hostPairList.innerHTML = '';
+    const arrange = view.pairOptions.matching === 'arrange';
+    if (swapPick && !view.players.some((p) => p.id === swapPick)) swapPick = null;
+    const nameChip = (p) => {
+      if (!arrange) return make('span', 'pair-name', p.name);
+      const b = make('button', 'pair-name' + (swapPick === p.id ? ' picked' : ''), p.name);
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        if (!swapPick) swapPick = p.id;
+        else if (swapPick === p.id) swapPick = null;
+        else {
+          hostAction('swap', { a: swapPick, b: p.id });
+          swapPick = null;
+        }
+        renderHostPairsLobby(hostView);
+      });
+      return b;
+    };
+    for (const [a, b] of view.pairs) {
+      const li = make('li');
+      li.append(nameChip(a), make('span', 'pair-vs', 'vs'));
+      li.append(b ? nameChip(b) : make('span', 'pair-name other', view.pairOptions.odd === 'cpu' ? 'CPU' : 'You'));
+      el.hostPairList.append(li);
+    }
+    // Playing the odd one out from another device: its link and whether it has joined
+    const device = view.pairOptions.odd === 'device';
+    el.hostTeacherDevice.hidden = !device;
+    if (device) {
+      const url = `${joinUrl(view.code).base}#class=${view.code}&play=${view.playKey}`;
+      el.hostTeacherUrl.textContent = url.replace(/^https?:\/\//, '');
+      if (el.hostTeacherQr.dataset.url !== url) {
+        drawQr(el.hostTeacherQr, url);
+        el.hostTeacherQr.dataset.url = url;
+      }
+      const joined = view.teacher && view.teacher.connected;
+      el.hostTeacherStatus.textContent = joined ? '✓ Your other device has joined.' : 'Not joined yet.';
+      el.hostTeacherStatus.classList.toggle('ok', Boolean(joined));
+    }
+    if (odd.needed && !odd.ready) {
+      el.hostStartBtn.disabled = true;
+      el.hostStartBtn.textContent = 'Waiting for your other device to join…';
+    } else if (n) {
+      const games = Math.ceil(n / 2);
+      el.hostStartBtn.textContent = `Start ${games} ${games === 1 ? 'game' : 'games'} (${n} ${n === 1 ? 'student' : 'students'})`;
+    }
+  }
+
+  for (const [group, key] of [
+    [el.hostMatching, 'matching'],
+    [el.hostOdd, 'odd'],
+  ]) {
+    group.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b) hostAction('pairOptions', { options: { [key]: b.dataset.value } });
+    });
+  }
+
+  // One card per pair: both names and scores, whose turn it is, and how it ended.
+  function renderHostMatches(view, list) {
+    list.innerHTML = '';
+    for (const m of view.matches) {
+      const li = make('li', 'host-match' + (m.over ? ' over' : ''));
+      m.players.forEach((p, i) => {
+        const row = make('div', 'match-row' + (m.over && m.winner === p.id ? ' winner' : ''));
+        const turn = !m.over && m.current === i;
+        row.append(make('span', 'match-turn', turn ? '🎲' : m.over && m.winner === p.id ? '🏆' : ''), make('span', 'match-name', p.name), make('span', 'match-score', String(p.score)));
+        li.append(row);
+      });
+      const left = m.left && m.players.find((p) => p.id === m.left);
+      const status = m.over ? (left ? `${left.name} left` : m.winner ? 'Finished' : 'Tie!') : `Board ${Math.round(m.filled * 100)}% full`;
+      li.append(make('div', 'match-status', status));
+      list.append(li);
+    }
+  }
+
+  // ---- teacher: playing the odd one out on this screen
+
+  let hostOnGame = false; // showing the teacher's own game instead of the class
+
+  function showHostView() {
+    hostOnGame = false;
+    el.gameScreen.hidden = true;
+    el.gameOver.hidden = true;
+    el.hostScreen.hidden = !host;
+    if (!host) el.startScreen.hidden = false;
+    updateMyGameButton();
+  }
+
+  function showMyGame() {
+    if (!game || game.mode !== 'pair') return;
+    hostOnGame = true;
+    el.hostScreen.hidden = true;
+    el.gameScreen.hidden = false;
+    resizeBoard();
+    render();
+    if (game.phase === 'over') {
+      el.gameOver.hidden = false;
+      el.gameOver.querySelector('.dialog').scrollTop = 0;
+    }
+  }
+
+  function updateMyGameButton() {
+    const btn = el.hostMyGameBtn;
+    const mine = classSession && classSession.host && game && game.mode === 'pair';
+    btn.hidden = !mine || !hostView || hostView.state === 'lobby';
+    if (btn.hidden) return;
+    const opp = opponent();
+    const yourTurn = game.phase !== 'over' && game.current === game.classroom.me;
+    btn.textContent = game.phase === 'over' ? `Your game with ${opp.name} is over: see the result` : yourTurn ? `🎲 Your turn! Play your game with ${opp.name}` : `Your game with ${opp.name}`;
+    btn.classList.toggle('your-turn', yourTurn);
+  }
+  el.hostMyGameBtn.addEventListener('click', showMyGame);
+
   function renderHostRoster(view) {
+    if (view.type === 'tournament' && view.tournament) return renderTournamentRoster(view);
     const n = view.players.length;
     el.hostRosterTitle.textContent = view.state === 'lobby' ? `${n} joined` : view.state === 'playing' ? 'Leaderboard' : 'Final scores';
     el.hostRoster.innerHTML = '';
@@ -4021,15 +5264,31 @@
         li.append(remove);
       } else {
         li.append(make('span', 'host-score', `${p.score}`));
-        const status = !p.connected ? '📴' : view.state === 'playing' ? (p.done ? '✓' : '…') : '';
+        const match = view.type === 'pairs' && view.matches.find((m) => m.players.some((x) => x.id === p.id));
+        const pairStatus = match ? (match.over ? '🏁' : match.players[match.current].id === p.id ? '🎲' : '') : '';
+        const status = !p.connected ? '📴' : view.state !== 'playing' ? '' : view.type === 'pairs' ? pairStatus : p.done ? '✓' : '…';
         li.append(make('span', 'host-status', status));
-        li.title = !p.connected ? 'Not connected' : p.done ? 'Done with this roll' : 'Still working';
+        li.title = !p.connected ? 'Not connected' : view.type === 'pairs' ? '' : p.done ? 'Done with this roll' : 'Still working';
       }
+      el.hostRoster.append(li);
+    }
+    // Joined after the game started: they play the next one
+    for (const p of view.waiting || []) {
+      const li = make('li', 'waiting' + (p.connected ? '' : ' offline'));
+      li.append(make('span', 'host-name', p.name), make('span', 'host-waiting', '⏳ next game'));
+      li.title = 'Joined after this game started';
       el.hostRoster.append(li);
     }
   }
 
   function renderHostResults(view) {
+    if (view.type === 'pairs') renderHostMatches(view, el.hostMatchResults);
+    if (view.type === 'tournament' && view.tournament) {
+      renderTournament(view.tournament, el.hostTournamentFinal);
+      renderTournamentPodium(view.tournament);
+      renderHostReport(view);
+      return;
+    }
     el.hostPodium.innerHTML = '';
     const medals = ['🥇', '🥈', '🥉'];
     for (const p of view.players.filter((x) => x.rank <= 3).slice(0, 5)) {
@@ -4037,6 +5296,10 @@
       li.append(make('span', 'podium-medal', medals[p.rank - 1]), make('span', 'podium-name', p.name), make('span', 'podium-score', `${p.score} pts`));
       el.hostPodium.append(li);
     }
+    renderHostReport(view);
+  }
+
+  function renderHostReport(view) {
     const r = view.report;
     el.hostReport.innerHTML = '';
     const tile = (value, label) => {
@@ -4058,7 +5321,19 @@
     }
   }
 
-  el.hostStartBtn.addEventListener('click', () => hostAction('start'));
+  el.hostStartBtn.addEventListener('click', async () => {
+    const v = hostView;
+    if (v && v.type === 'pairs' && v.odd.needed && v.odd.how === 'screen' && !(classSession && classSession.host)) {
+      // The odd one out plays the teacher, here: join as a player first
+      try {
+        const me = await Classroom.joinAsTeacher(host);
+        connectClass({ code: host.code, id: me.id, key: me.key, name: me.name, teacher: true, host: true });
+      } catch (err) {
+        return toast('⚠️ ' + err.message);
+      }
+    }
+    hostAction('start');
+  });
   el.hostNextBtn.addEventListener('click', () => hostAction('next'));
   el.hostEndBtn.addEventListener('click', () => confirm('End the game now? Scores so far are final.') && hostAction('end'));
   el.hostAuto.addEventListener('change', () => hostAction('autoNext', { on: el.hostAuto.checked }));
@@ -4075,7 +5350,7 @@
   // Space rolls again on the teacher's screen
   document.addEventListener('keydown', (e) => {
     if (el.hostScreen.hidden || !hostView || e.target.closest('input, button, .overlay')) return;
-    if ((e.key === ' ' || e.key === 'Enter') && hostView.state === 'playing') {
+    if ((e.key === ' ' || e.key === 'Enter') && hostView.state === 'playing' && hostView.type === 'class') {
       e.preventDefault();
       hostAction('next');
     }
@@ -4086,16 +5361,131 @@
   if (Classroom.served()) {
     const savedHost = Classroom.host();
     const savedSession = Classroom.session();
-    const linkCode = Classroom.codeFromHash();
-    if (linkCode) {
+    const link = Classroom.linkFromHash();
+    if (link) {
       history.replaceState(null, '', location.pathname + location.search);
       tap('[data-mode="multi"]');
       tap('#multi-kind [data-kind="classroom"]');
-      if (savedSession && savedSession.code === linkCode) connectClass(savedSession);
-      else openClassJoin(linkCode);
-    } else if (savedHost) connectHost(savedHost);
-    else if (savedSession) connectClass(savedSession);
+      if (savedSession && savedSession.code === link.code) connectClass(savedSession);
+      else if (link.play) {
+        // the teacher's other device, for playing an odd one out
+        Classroom.joinWithPlayKey(link.code, link.play)
+          .then((me) => {
+            connectClass({ code: link.code, id: me.id, key: me.key, name: me.name, teacher: true });
+            showClassWaiting(null);
+          })
+          .catch((err) => toast('⚠️ ' + err.message));
+      } else openClassJoin(link.code, true);
+    } else {
+      if (savedHost) connectHost(savedHost);
+      if (savedSession && (!savedHost || savedSession.host)) connectClass(savedSession);
+    }
   }
+
+  // Board wins started being counted when winning a board revealed the next one:
+  // give credit for wins already in the game history (once).
+  if (!progress.boardWinsFromHistory) {
+    for (const g of loadHistory()) {
+      if (!g.kind && g.vsComputer && g.players.some((p) => !p.cpu && p.result === 'win')) Progress.recordBoardWin(progress, g.size);
+    }
+    progress.boardWinsFromHistory = true;
+    saveProgress();
+    syncBoardLocks();
+  }
+
+  // ---------------------------------------------------------------- cheat codes
+  // Press ~ anywhere (outside a text box) to open the cheat codes box.
+
+  // code (lower case) -> { name, run() }. None yet.
+  // Codes live in Progress.CHEAT_CODES. The menu lists the ones that are on by
+  // what they do (never the code itself), each with a Turn off button.
+  const cheatsEl = { box: $('cheats'), form: $('cheats-form'), input: $('cheats-input'), msg: $('cheats-msg'), close: $('cheats-close'), active: $('cheats-active') };
+  const inClassGame = () => game && (game.mode === 'class' || game.mode === 'pair');
+
+  // Unlocks changed: bring every menu, list and lock badge up to date.
+  function refreshUnlocks() {
+    enforceLocks();
+    saveSettings();
+    saveProgress();
+    refreshAvailableFilters();
+    if (!el.shopDialog.hidden) renderShop();
+    if (!el.wardrobeDialog.hidden) renderWardrobe();
+    syncSettingsUI();
+    syncBoardLocks();
+    syncModeLocks();
+    updatePracticePreview();
+    renderGameLevel();
+    renderBoardHint();
+    refreshOpenNudges();
+    updateMenuBadges();
+  }
+
+  function renderActiveCheats() {
+    const codes = Progress.activeCheats(progress);
+    cheatsEl.active.hidden = !codes.length;
+    cheatsEl.active.replaceChildren();
+    if (!codes.length) return;
+    cheatsEl.active.append(make('h3', null, 'Active'));
+    for (const code of codes) {
+      const row = make('div', 'cheat-row');
+      const off = make('button', 'btn btn-small', 'Turn off');
+      off.type = 'button';
+      off.addEventListener('click', () => {
+        Progress.cheatOff(progress, code);
+        refreshUnlocks();
+        renderActiveCheats();
+        cheatsEl.msg.className = 'cheats-msg';
+        cheatsEl.msg.textContent = 'Cheat turned off.';
+      });
+      row.append(make('span', null, `✨ ${Progress.CHEAT_CODES[code].name}`), off);
+      cheatsEl.active.append(row);
+    }
+  }
+
+  function openCheats() {
+    cheatsEl.input.value = '';
+    cheatsEl.input.classList.remove('wrong');
+    cheatsEl.msg.className = 'cheats-msg';
+    cheatsEl.msg.textContent = inClassGame() ? 'Cheats are switched off in class games. Nice try! 😄' : '';
+    renderActiveCheats();
+    cheatsEl.box.hidden = false;
+    cheatsEl.input.focus();
+  }
+  const closeCheats = () => (cheatsEl.box.hidden = true);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '~' && e.key !== '`') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input, textarea, select')) return;
+    if ([...document.querySelectorAll('.overlay')].some((o) => !o.hidden)) return; // not on top of another dialog
+    e.preventDefault();
+    openCheats();
+  });
+  cheatsEl.close.addEventListener('click', closeCheats);
+  cheatsEl.box.addEventListener('click', (e) => e.target === cheatsEl.box && closeCheats());
+  cheatsEl.box.addEventListener('keydown', (e) => e.key === 'Escape' && closeCheats());
+  cheatsEl.form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = cheatsEl.input.value.trim().toLowerCase();
+    if (!code || inClassGame()) return;
+    cheatsEl.input.classList.remove('wrong');
+    cheatsEl.input.value = '';
+    if (Progress.CHEAT_CODES[code]) {
+      const on = Progress.cheatOn(progress, code);
+      if (on) {
+        confettiFullScreen(3);
+        celebrate(Progress.awardAchievements(progress, { event: 'cheat', code })); // Cheater, plus this code's secret
+        refreshUnlocks();
+      }
+      renderActiveCheats();
+      cheatsEl.msg.className = 'cheats-msg good';
+      cheatsEl.msg.textContent = on ? `✨ ${Progress.CHEAT_CODES[code].name}` : 'That one is already on.';
+      return;
+    }
+    void cheatsEl.input.offsetWidth; // restart the shake
+    cheatsEl.input.classList.add('wrong');
+    cheatsEl.msg.className = 'cheats-msg';
+    cheatsEl.msg.textContent = 'Nothing happened…';
+  });
 
   // ---------------------------------------------------------------- daily check-in
 
@@ -4327,14 +5717,19 @@
   });
 
   el.menuBtn.addEventListener('click', () => {
-    const inClass = game && game.mode === 'class';
+    if (classSession && classSession.host) return showHostView(); // teacher: back to the class
+    const inClass = game && (game.mode === 'class' || game.mode === 'pair');
     const question = inClass ? 'Leave the class game? Your score so far won’t count.' : 'Leave this game and go back to the menu?';
     if (game && game.phase !== 'over' && !confirm(question)) return;
     if (inClass) leaveClass();
     toMenu();
   });
   el.toMenuBtn.addEventListener('click', () => {
-    if (game && game.mode === 'class') leaveClass();
+    if (classSession && classSession.host) {
+      el.gameOver.hidden = true;
+      return showHostView();
+    }
+    if (game && (game.mode === 'class' || game.mode === 'pair')) leaveClass();
     toMenu();
   });
   el.againBtn.addEventListener('click', () => {
@@ -4404,6 +5799,10 @@
           ? game.classroom.round
             ? `Roll ${game.classroom.round} of ${game.classroom.view.settings.rounds}`
             : 'Class game'
+          : game.mode === 'pair'
+            ? game.current === game.classroom.me
+              ? 'Your turn'
+              : `${p.name}'s turn`
           : game.mode === 'single' && !p.cpu
             ? 'Your turn'
             : `${p.name}'s turn`;
