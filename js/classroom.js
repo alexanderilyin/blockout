@@ -22,9 +22,11 @@
   async function request(method, path, body) {
     let res;
     try {
+      // Signed in (js/auth.js): the server knows who's hosting or joining
+      const token = root.BlockoutAuth && root.BlockoutAuth.token();
       res = await fetch(path, {
         method,
-        headers: body ? { 'Content-Type': 'application/json' } : {},
+        headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (e) {

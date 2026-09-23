@@ -5,6 +5,7 @@
   const Progress = window.BlockoutProgress;
   const Invite = window.BlockoutInvite;
   const Cosmetics = window.BlockoutCosmetics;
+  const Auth = window.BlockoutAuth; // sign-in (js/auth.js); guests play without it
   const seededRandom = Invite.seededRandom;
 
   const DEFAULT_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
@@ -42,7 +43,8 @@
   // Board sizes other than the small one are bought in the shop.
   // Only the smallest board is free; every other size is bought in the shop.
   const BOARD_UNLOCK = { 6: null, 8: 'board8', 10: 'board10', 12: 'board12', 16: 'board16', 20: 'board20', 24: 'board24', custom: 'boardCustom' };
-  const PROGRESS_KEY = 'blockout.progress';
+  // A signed-in player's save is kept apart from the guest one (see js/auth.js)
+  const PROGRESS_KEY = Auth ? Auth.progressKey() : 'blockout.progress';
   const PASS_DELAY = 1600;
   const AUTO_PLACE_MS = 900; // how long an auto-placed rectangle is previewed
   const AUTO_ROLL_MS = 700; // pause before auto roll, so "Your turn" can be read first
@@ -320,6 +322,20 @@
     } catch (_) {
       // not fatal: progress just won't persist
     }
+    if (Auth) Auth.queueProgress(progress); // signed in: send it to the account too
+    renderWallet();
+  }
+
+  // Swap in another save (the account's, after signing in) and redraw what shows it.
+  function replaceProgress(next) {
+    for (const key of Object.keys(progress)) delete progress[key];
+    Object.assign(progress, Progress.normalize(next));
+    try {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+    } catch (_) {
+      // not fatal
+    }
+    refreshUnlocks();
     renderWallet();
   }
 
@@ -2192,6 +2208,8 @@
       toast(`🏁 Finished ${an} ${game.size}×${game.size} game!`, `+${boardBonus} bonus points`);
     }
     const humanWon = winners.length === 1 && !winners[0].cpu;
+    // for class stats and homework ("beat the CPU on 8×8", "finish 5 games")
+    Progress.noteActivity(progress, { kind: 'game', mode: game.mode, difficulty: game.difficulty, size: game.size, won: game.mode === 'single' && humanWon });
     if (humanWon && game.mode === 'single') {
       Progress.recordBoardWin(progress, game.size); // reveals the next board
       syncBoardLocks();
@@ -2333,10 +2351,11 @@
     return Progress.playerKey(name) === 'you';
   }
 
-  function renderFactGrid(name, facts) {
+  // size: a fixed size (a teacher or parent looking at a student), else what this player reached
+  function renderFactGrid(name, facts, size = null) {
     const seenMax = Math.max(0, ...Object.keys(facts).flatMap((k) => k.split('×').map((n) => Number(n.trim()))));
     const unlocked = unlockedTableSize();
-    const max = Math.max(6, seenMax > 8 ? 12 : seenMax > 6 ? 8 : 6, unlocked);
+    const max = size || Math.max(6, seenMax > 8 ? 12 : seenMax > 6 ? 8 : 6, unlocked);
     const wrap = make('div', 'fact-grid-wrap');
     if (name) wrap.append(make('div', 'practice-name', name)); // no label for the default "You"
     const grid = make('div', 'fact-grid');
@@ -3479,7 +3498,7 @@
     const queue = Progress.pickPracticeFacts(facts, Progress.practiceSet(settings.difficulty), count, Math.random, tables);
     const before = {};
     for (const [a, b] of queue) before[Progress.factKey(a, b)] = Progress.factStatus(facts[Progress.factKey(a, b)]);
-    practice = { name, max, count, tables, expert, timer, startedAt: Date.now(), times: [], queue, index: 0, requeued: new Set(), before, firstTry: 0, answered: 0, streak: 0, bestStreak: 0, points: 0, earned: [], current: null };
+    practice = { name, max, count, tables, expert, timer, difficulty: settings.difficulty, startedAt: Date.now(), times: [], queue, index: 0, requeued: new Set(), before, firstTry: 0, answered: 0, streak: 0, bestStreak: 0, points: 0, earned: [], current: null };
     el.startScreen.hidden = true;
     el.gameScreen.hidden = true;
     el.practiceDone.hidden = true;
@@ -3710,6 +3729,7 @@
       toast(`🏁 Finished all ${pr.count} questions!`, `+${finish} bonus points${pr.expert ? ` (×${EXPERT_BONUS} Expert)` : ''}`);
     }
     recordPracticeRound(pr);
+    Progress.noteActivity(progress, { kind: 'practice', difficulty: pr.difficulty, count: pr.count, expert: pr.expert, finished: true, firstTry: pr.firstTry });
     pr.earned.push(...celebrate(Progress.awardAchievements(progress, { event: 'practice' })));
     saveProgress();
 
@@ -4089,7 +4109,10 @@
   // fromLink: opened from a join link (QR code or a link posted in the class chat)
   async function openClassJoin(code = '', fromLink = false) {
     el.classCodeInput.value = code || '';
-    el.classNameInput.value = lastClassName();
+    // Signed-in students play under their account's first name
+    const account = Auth && Auth.role() === 'student' ? Auth.user() : null;
+    el.classNameInput.value = account ? account.firstName : lastClassName();
+    el.classNameInput.readOnly = Boolean(account);
     el.classJoinError.hidden = true;
     el.classJoinForm.hidden = false;
     el.classWait.hidden = true;
@@ -4526,6 +4549,7 @@
     Progress.addPoints(progress, me.score);
     progress.counters.pairGames = (progress.counters.pairGames || 0) + 1;
     if (won) progress.counters.pairWins = (progress.counters.pairWins || 0) + 1;
+    Progress.noteActivity(progress, { kind: 'class', type: view.tournament ? 'tournament' : 'pairs', won });
     const p = game.players[c.me];
     const asked = p.answered + p.stats.timeouts;
     const earned = Progress.awardAchievements(progress, {
@@ -4693,6 +4717,7 @@
     el.rewards.innerHTML = '';
     Progress.addPoints(progress, you.score);
     progress.counters.classGames = (progress.counters.classGames || 0) + 1;
+    Progress.noteActivity(progress, { kind: 'class', type: 'class', rank: you.rank });
     const asked = you.answered + you.timeouts;
     const earned = Progress.awardAchievements(progress, {
       event: 'class',
@@ -4771,6 +4796,8 @@
 
   // Creating a class. Everything here (and more) can be changed in the lobby too.
   function openHostSetup() {
+    // Hosting a class needs a teacher account (the server checks too)
+    if (Auth && Auth.served() && Auth.role() !== 'teacher') return window.BlockoutAccounts.askTeacherSignIn();
     renderHostType();
     el.hostError.hidden = true;
     el.hostSetup.hidden = false;
@@ -6273,6 +6300,23 @@
       ctx.fillText('✕', x + w / 2, y + h / 2);
     }
   }
+
+  // For the account screens (js/accounts.js): what they need from the game.
+  window.BlockoutGame = {
+    progress: () => progress,
+    replaceProgress,
+    saveProgress,
+    openHostSetup,
+    startHost: (h) => connectHost(h),
+    joinClass: (code) => openClassJoin(code, true),
+    renderFactGrid,
+    renderFactLegend,
+    make,
+    icon,
+    toast,
+    celebrate,
+    menuShowing: () => !el.startScreen.hidden,
+  };
 
   // Darken (negative amount) or lighten a #rrggbb colour.
   function shade(hex, amount) {

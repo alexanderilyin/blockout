@@ -723,9 +723,18 @@
   // Two saves of the same person (this device's and the account's) as one: the
   // most of every count, every unlock, achievement and sticker, and for each
   // fact whichever record has seen it more. Used once per device and account.
+  // A copy with every cheat's effects taken back (what an account stores:
+  // cheats belong to the device that typed them).
+  function withoutCheats(state) {
+    const s = normalize(JSON.parse(JSON.stringify(state)));
+    for (const code of activeCheats(s)) cheatOff(s, code);
+    s.cheats = {};
+    return s;
+  }
+
   function mergeProgress(a, b) {
-    const x = normalize(a);
-    const y = normalize(b);
+    const x = withoutCheats(a);
+    const y = withoutCheats(b);
     const out = normalize({ ...y, ...x });
     out.wallet = Math.max(x.wallet, y.wallet);
     out.earned = Math.max(x.earned, y.earned);
@@ -759,7 +768,6 @@
       })
       .sort((p, q) => p.t - q.t)
       .slice(-ACTIVITY_LIMIT);
-    out.cheats = {}; // cheats stay on the device that typed them
     return out;
   }
 
@@ -867,6 +875,7 @@
     practiceSet,
     noteActivity,
     mergeProgress,
+    withoutCheats,
     factSummary,
     cleanGoal,
     describeGoal,

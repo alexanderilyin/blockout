@@ -21,9 +21,15 @@ A multiplication-as-area game for 3rd graders, based on "Blockout" from Math for
 | `server/tournament.js` | Tournament formats: knockout, double elimination, round robin, Swiss, king of the hill. |
 | `server/moderation.js` | Username checks: `blocklist.txt`, plus OpenAI moderation only when `OPENAI_API_KEY` is set (fails open). |
 | `prototypes/` | Other operations (addition, subtraction, division, fractions). Single player and practice only. Shares `prototypes/shared/`. |
+| `js/auth.js` | `BlockoutAuth`: sign-in (dev or Keycloak PKCE), the bearer token, per-account progress key and sync with the server. |
+| `js/accounts.js` | Account screens: sign in, student homework, teacher My classes, parent My kids, live tournament banner. Uses `window.BlockoutGame` (a small API game.js exposes). |
+| `server/store.js` | sqlite (`node:sqlite`) storage for accounts; `data/blockout.db` or `BLOCKOUT_DB` (`:memory:` in tests). |
+| `server/auth.js` | Sign-in providers behind one interface: dev (HMAC JWT) and Keycloak (RS256 via JWKS); `identity()` keeps only first name, last initial, role, email domain. |
+| `server/accounts.js` | Account rules: classes and rosters, homework, parent links, scheduled tournaments. |
+| `docs/` | `privacy.md`, and the v0.3.0 plan and log. |
 | `test/*.test.js` | `node:test` unit tests for the pure modules and the server rooms. |
 
-Browser script load order (index.html): core → progress → cosmetics → invite → vendor/qrcode → classroom → game. Modules are UMD-style: `window.BlockoutX` in the browser, `require()` in tests.
+Browser script load order (index.html): core → progress → auth → cosmetics → invite → vendor/qrcode → classroom → game → accounts. Modules are UMD-style: `window.BlockoutX` in the browser, `require()` in tests.
 
 ## Commands
 
@@ -56,11 +62,13 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
   - `#start-btn`, `#roll-btn`, `#unlock-yes` (the quick-unlock confirm), `#cheats-input`
   - `[data-mode="single|multi|practice"]`, `[data-setting="difficulty"] [data-value=…]`, `#board-size [data-size=…]`
 - **Check for errors:** collect `pageerror` events and check there are none. Screenshot and look at the result.
-- **Classroom flows:** use several browser contexts (a teacher plus students).
+- **Classroom flows:** use several browser contexts (a teacher plus students). Hosting needs a teacher sign-in: POST `/api/auth/dev` with `{ role: 'teacher', firstName, schoolId: 'cadence-park' }` and store `{ token, user }` in `localStorage['blockout.auth']`, or use the sign-in dialog.
+- **Accounts:** start the test server with `BLOCKOUT_DB=:memory:` so runs don't share data.
 
 ## Storage
 
 - **localStorage:**
+  - `blockout.auth`: `{ token, user }` when signed in; `blockout.progress.<userId>` is that account's save (cache), `blockout.mergedInto` the accounts this device's guest save went into
   - `blockout.progress`: wallet, unlocks, achievements, facts per player key, counters, boardWins, helpedFacts, cheats, migration flags
   - `blockout.settings`, `blockout.history`, `blockout.className`, `blockout.classHost`
 - **sessionStorage** (per tab): `blockout.class`, the classroom session.
@@ -97,6 +105,7 @@ await page.addInitScript((pr) => { if (!sessionStorage.getItem('s')) { sessionSt
   - The menu lists active cheats by description, never by code.
   - Each code gets its own secret achievement `cheat_<code>` (a test enforces this).
 - **Dialogs** have a bottom `.dialog-actions` button panel, like the Shop.
+- **Accounts are optional:** guests must always be able to play everything except hosting a class. Store as little about children as possible (see docs/privacy.md).
 - **The audience is 8-year-olds:** use short, friendly, concrete wording ("Help me count", "Needs practice"). Target devices are Chromebooks, and it must work at phone width too.
 
 ## Code style

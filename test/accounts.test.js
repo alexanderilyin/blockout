@@ -98,6 +98,10 @@ test('progress sync: saves round-trip, cheats stay on the device, stats come fro
   const back = accounts.getProgress(kid).progress;
   assert.equal(back.wallet, 50);
   assert.deepEqual(back.cheats, {});
+  // IDDQD's free unlocks never reach the account
+  P.cheatOn(s, 'iddqd');
+  accounts.putProgress(kid, s);
+  assert.deepEqual(accounts.getProgress(kid).progress.unlocks, []);
   assert.deepEqual(P.factSummary(back).needsPractice, ['6 × 7']);
 });
 

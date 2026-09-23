@@ -99,8 +99,7 @@ function createAccounts({ store, auth, now = () => Date.now() }) {
   function putProgress(user, data) {
     need(user);
     if (!data || typeof data !== 'object') throw new AccountError('progress', 'That isn’t a save.');
-    const clean = Progress.normalize(data);
-    clean.cheats = {}; // cheats stay on the device
+    const clean = Progress.withoutCheats(data); // cheats (and what they unlocked) stay on the device
     if (JSON.stringify(clean).length > MAX_PROGRESS_BYTES) throw new AccountError('progress', 'That save is too big.');
     store.putProgress(user.id, clean, now());
     return { ok: true, updatedAt: now() };
@@ -246,7 +245,10 @@ function createAccounts({ store, auth, now = () => Date.now() }) {
     need(user, 'parent', 'teacher');
     const child = store.user(childId);
     if (!child || !canSee(user, childId)) throw new AccountError('student', 'You can’t see that student.', 404);
-    return studentStats(child, { withParentCode: user.role === 'teacher' });
+    // the detail view also draws the whole Times Table grid
+    const state = progressOf(child.id);
+    const facts = ((state && state.facts && state.facts.you) || { facts: {} }).facts;
+    return { ...studentStats(child, { withParentCode: user.role === 'teacher' }), facts };
   }
 
   // ---- homework
