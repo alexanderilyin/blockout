@@ -518,13 +518,11 @@
     const only = new Set(tables.filter((n) => allowed.includes(n)));
     const pool = [];
     for (const [a, b] of allPairs) {
-      {
-        if (only.size && !(set && set.bSideOnly ? only.has(b) : only.has(a) || only.has(b))) continue;
-        const status = factStatus(facts[factKey(a, b)]);
-        let weight = PRACTICE_WEIGHTS[status];
-        if ((a === 1 || b === 1) && status !== 'practice') weight /= 2; // ×1 facts are easy wins
-        pool.push({ a, b, weight });
-      }
+      if (only.size && !(set && set.bSideOnly ? only.has(b) : only.has(a) || only.has(b))) continue;
+      const status = factStatus(facts[factKey(a, b)]);
+      let weight = PRACTICE_WEIGHTS[status];
+      if ((a === 1 || b === 1) && status !== 'practice') weight /= 2; // ×1 facts are easy wins
+      pool.push({ a, b, weight });
     }
     const picked = [];
     while (picked.length < count && pool.length) {

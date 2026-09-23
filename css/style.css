@@ -678,6 +678,7 @@ button.pair-name.picked { border-style: solid; border-color: var(--accent); back
   100% { transform: rotate(-8deg); }
 }
 
+a.btn { color: inherit; text-decoration: none; display: inline-block; }
 .btn-small { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
 
 /* Real dice entry */

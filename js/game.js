@@ -1952,6 +1952,9 @@
 
   // ---- computer: show the working step by step
 
+  // "an 8", "an 11", "an 18", but "a 7"
+  const article = (n) => (/^(8|11|18)$/.test(String(n)) || /^8\d$/.test(String(n)) ? 'an' : 'a');
+
   function addStep(html, big = false) {
     const li = document.createElement('li');
     li.innerHTML = html;
@@ -1963,7 +1966,7 @@
   async function explainComputerMove(rect) {
     const plan = countPlan(rect);
     const { a, b, area } = rect;
-    addStep(`I drew a <span class="num">${a}</span> by <span class="num">${b}</span> rectangle. How many squares is that?`);
+    addStep(`I drew ${article(a)} <span class="num">${a}</span> by <span class="num">${b}</span> rectangle. How many squares is that?`);
     await waitInGame(cpuStep());
     const split = legendSplit(rect);
     if (split) {
@@ -2078,7 +2081,7 @@
     setMsg('');
     el.steps.hidden = false;
     const hello = currentPlayer().hello ? `${currentPlayer().hello} ` : ''; // CPU character's greeting
-    addStep(`${hello}I rolled a <span class="num">${a}</span> and a <span class="num">${b}</span>.`);
+    addStep(`${hello}I rolled ${article(a)} <span class="num">${a}</span> and ${article(b)} <span class="num">${b}</span>.`);
     await waitInGame(cpuStep());
     if (game.placeMode === 'draw') {
       const where = game.board.rects.length ? 'snug against the others' : 'in a corner';
@@ -3351,12 +3354,15 @@
   }
 
   // Master difficulty's dice: how often each fact comes up, from the player's
-  // record (like practice: "Needs practice" most, mastered hardly ever).
+  // record. Like practice, but mastered facts are rarer still: whoever reaches
+  // Master has mastered most of the table, and with practice's weights only
+  // about a third of the rolls would be weak facts (this makes it ~70%).
+  const MASTER_WEIGHTS = { ...Progress.PRACTICE_WEIGHTS, mastered: 0.1 };
   function weakFactWeight(player) {
     const facts = playerFacts(player ? player.name : 'You');
     return (a, b) => {
       const status = Progress.factStatus(facts[Progress.factKey(a, b)]);
-      let weight = Progress.PRACTICE_WEIGHTS[status];
+      let weight = MASTER_WEIGHTS[status];
       if ((a === 1 || b === 1) && status !== 'practice') weight /= 2;
       return weight;
     };
