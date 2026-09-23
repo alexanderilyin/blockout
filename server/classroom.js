@@ -18,6 +18,9 @@ const os = require('os');
 const path = require('path');
 const Rooms = require('./rooms.js');
 const Moderation = require('./moderation.js');
+const Auth = require('./auth.js');
+const { openStore } = require('./store.js');
+const { createAccounts, AccountError } = require('./accounts.js');
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -41,6 +44,8 @@ const HEARTBEAT_MS = 25000;
 const POLL_HOLD_MS = 25000; // a long poll waits this long for a change before answering anyway
 const CLOSED_MEMORY_MS = 30 * 60 * 1000; // pollers of a closed class are told so for this long
 const MAX_BODY = 16 * 1024;
+const MAX_PROGRESS_BODY = 600 * 1024; // a signed-in student's whole save
+const SCHEDULE_TICK_MS = 10 * 1000; // how often due tournaments are opened
 
 const rooms = new Map(); // code -> room
 const streams = new Map(); // code -> Set of { res, role: 'teacher' | 'student', id }
@@ -79,13 +84,13 @@ function send(res, status, body, type = 'application/json; charset=utf-8') {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-function readJson(req) {
+function readJson(req, max = MAX_BODY) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', (c) => {
       size += c.length;
-      if (size > MAX_BODY) {
+      if (size > max) {
         reject(new Rooms.RoomError('size', 'Too much data.'));
         req.destroy();
       } else chunks.push(c);
@@ -292,13 +297,82 @@ function lanUrls() {
   return out;
 }
 
+// ---------------------------------------------------------------- accounts
+// Teachers, students and parents (server/accounts.js), stored in sqlite
+// (server/store.js). Sign-in is swappable (server/auth.js): dev sign-in for now,
+// Keycloak later. Guests keep playing without any of this.
+
+const store = openStore();
+const auth = Auth.fromEnv(process.env, store);
+const accounts = createAccounts({ store, auth });
+
+// The signed-in user for a request, or null (a guest)
+const signedIn = (req) => accounts.authenticate(Auth.bearer(req));
+
+function openRoom(settings) {
+  const room = Rooms.createRoom(settings, { taken: new Set(rooms.keys()) });
+  rooms.set(room.code, room);
+  return room;
+}
+
+// [method, path pattern, handler(user, params, req)]; :names in the pattern become params
+const accountRoutes = [
+  ['GET', '/api/auth/config', () => accounts.config()],
+  ['POST', '/api/auth/dev', async (user, p, req) => accounts.devSignIn(await readJson(req))],
+  ['GET', '/api/me', (user) => accounts.me(user)],
+  ['GET', '/api/me/progress', (user) => accounts.getProgress(user)],
+  ['PUT', '/api/me/progress', async (user, p, req) => accounts.putProgress(user, (await readJson(req, MAX_PROGRESS_BODY)).progress)],
+  ['GET', '/api/me/homework', (user) => accounts.myHomework(user)],
+  ['GET', '/api/me/classes', (user) => accounts.myClasses(user)],
+  ['POST', '/api/me/classes', async (user, p, req) => accounts.joinClass(user, await readJson(req))],
+  ['GET', '/api/me/parent-code', (user) => accounts.parentCode(user)],
+  ['GET', '/api/me/live', (user) => accounts.live(user)],
+  ['GET', '/api/classes', (user) => accounts.listClasses(user)],
+  ['POST', '/api/classes', async (user, p, req) => accounts.createClass(user, await readJson(req))],
+  ['GET', '/api/classes/:id', (user, p) => accounts.classDetail(user, p.id)],
+  ['DELETE', '/api/classes/:id/students/:student', (user, p) => accounts.removeStudent(user, p.id, p.student)],
+  ['GET', '/api/students/:id', (user, p) => accounts.childDetail(user, p.id)],
+  ['POST', '/api/homework', async (user, p, req) => accounts.createAssignment(user, await readJson(req))],
+  ['DELETE', '/api/homework/:id', (user, p) => accounts.deleteAssignment(user, p.id)],
+  ['GET', '/api/children', (user) => accounts.children(user)],
+  ['POST', '/api/children', async (user, p, req) => accounts.linkChild(user, await readJson(req))],
+  ['DELETE', '/api/children/:id', (user, p) => accounts.unlinkChild(user, p.id)],
+  ['GET', '/api/schedules', (user) => accounts.listSchedules(user)],
+  ['POST', '/api/schedules', async (user, p, req) => accounts.createSchedule(user, await readJson(req))],
+  ['DELETE', '/api/schedules/:id', (user, p) => accounts.deleteSchedule(user, p.id)],
+  ['GET', '/api/schedules/:id/host', (user, p) => accounts.hostSchedule(user, p.id)],
+];
+
+function matchAccountRoute(method, pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  for (const [m, pattern, handler] of accountRoutes) {
+    if (m !== method) continue;
+    const want = pattern.split('/').filter(Boolean);
+    if (want.length !== parts.length) continue;
+    const params = {};
+    if (want.every((w, i) => (w.startsWith(':') ? (params[w.slice(1)] = decodeURIComponent(parts[i])) : w === parts[i]))) return { handler, params };
+  }
+  return null;
+}
+
+// Scheduled tournaments: open each one's lobby when it's due
+setInterval(() => {
+  try {
+    accounts.openDue(openRoom);
+  } catch (e) {
+    console.error(e);
+  }
+}, SCHEDULE_TICK_MS).unref();
+
 const routes = {
   'GET /api/health': () => ({ ok: true, lan: lanUrls() }),
 
+  // Hosting a class needs a teacher account
   'POST /api/rooms': async (req) => {
+    const user = await signedIn(req);
+    if (!user || user.role !== 'teacher') throw new AccountError('teacher', 'Teachers: please sign in to host a class.', 401);
     const body = await readJson(req);
-    const room = Rooms.createRoom(body.settings, { taken: new Set(rooms.keys()) });
-    rooms.set(room.code, room);
+    const room = openRoom(body.settings);
     return { code: room.code, teacherKey: room.teacherKey, lan: lanUrls() };
   },
 
@@ -313,9 +387,15 @@ const routes = {
       if (body.teacher !== room.teacherKey && body.play !== room.playKey) throw new Rooms.RoomError('teacher', 'That teacher link isn’t right.');
       p = Rooms.joinTeacher(room);
     } else {
-      const check = await Moderation.checkName(body.name, { apiKey: OPENAI_API_KEY });
-      if (!check.ok) throw new Rooms.RoomError('name', 'Please use your real first name.');
-      p = Rooms.join(room, body.name);
+      // Signed-in students play under their account's name (their school
+      // already knows it): no name check, nothing sent to OpenAI.
+      const user = await signedIn(req);
+      if (user && user.role === 'student') p = Rooms.join(room, user.firstName);
+      else {
+        const check = await Moderation.checkName(body.name, { apiKey: OPENAI_API_KEY });
+        if (!check.ok) throw new Rooms.RoomError('name', 'Please use your real first name.');
+        p = Rooms.join(room, body.name);
+      }
     }
     broadcast(room);
     return { id: p.id, key: p.key, name: p.name, teacher: Boolean(p.isTeacher) };
@@ -433,6 +513,8 @@ function route(req) {
   const url = new URL(req.url, 'http://x');
   const parts = url.pathname.split('/').filter(Boolean); // api, rooms, CODE, action
   if (parts[0] !== 'api') return null;
+  const account = matchAccountRoute(req.method, url.pathname);
+  if (account) return { handler: async (r) => account.handler(await signedIn(r), account.params, r), url };
   if (parts.length === 4 && parts[1] === 'rooms') {
     return { handler: routes[`${req.method} /api/rooms/:code/${parts[3]}`], code: parts[2], url };
   }
@@ -465,6 +547,8 @@ const server = http.createServer(async (req, res) => {
     if (!r.handler) return send(res, 404, { error: 'not-found', message: 'Not found.' });
     send(res, 200, await r.handler(req, r.code));
   } catch (e) {
+    if (e instanceof AccountError) return send(res, e.status, { error: e.code, message: e.message });
+    if (e instanceof Auth.AuthError) return send(res, 401, { error: 'auth', message: e.message });
     if (e instanceof Rooms.RoomError) {
       const status = e.code === 'room' || e.code === 'player' ? 404 : e.code === 'teacher' ? 403 : 409;
       return send(res, status, { error: e.code, message: e.message });
@@ -492,7 +576,8 @@ if (require.main === module) {
     console.log(`Blockout classroom server on http://localhost:${PORT}/`);
     for (const url of lanUrls()) console.log(url === PUBLIC_URL ? `  Students join at: ${url}` : `  Chromebooks on this network: ${url}`);
     console.log(`  Name check: word list${OPENAI_API_KEY ? ' + OpenAI moderation' : ' (set OPENAI_API_KEY to add OpenAI moderation)'}`);
+    console.log(`  Sign-in: ${auth.name === 'dev' ? 'dev sign-in (pick any name and role; set BLOCKOUT_AUTH=keycloak for Keycloak)' : `Keycloak at ${auth.config.issuer}`}`);
   });
 }
 
-module.exports = { server, rooms };
+module.exports = { server, rooms, store, accounts };

@@ -26,6 +26,7 @@
       stickers: {}, // sticker id -> how many
       boardWins: {}, // board size -> wins against the CPU on it
       helpedFacts: {}, // '6 × 7' -> true after "Help me count" on it, until it's answered right first time
+      activity: [], // recent games and practice rounds (see noteActivity)
     };
   }
 
@@ -84,6 +85,7 @@
       boardWins: saved.boardWins || {},
       helpedFacts: saved.helpedFacts || {},
       cheats: saved.cheats || {},
+      activity: Array.isArray(saved.activity) ? saved.activity : [],
       seen: { wardrobe: [], stickers: [], ...(saved.seen || {}) }, // for "new" badges
       factsOrdered: true,
     };
@@ -705,6 +707,152 @@
     return true;
   }
 
+  // ---------------------------------------------------------------- accounts
+  // Shared by the page and the server (server/accounts.js): an activity log,
+  // merging a device's progress into an account, fact summaries and homework.
+
+  // Recent games and practice rounds, newest last (class stats, homework).
+  //   { t, kind: 'game'|'practice'|'class', difficulty, size?, won?, count?, finished? }
+  const ACTIVITY_LIMIT = 200;
+  function noteActivity(state, entry, now = Date.now()) {
+    state.activity = state.activity || [];
+    state.activity.push({ t: now, ...entry });
+    if (state.activity.length > ACTIVITY_LIMIT) state.activity.splice(0, state.activity.length - ACTIVITY_LIMIT);
+  }
+
+  // Two saves of the same person (this device's and the account's) as one: the
+  // most of every count, every unlock, achievement and sticker, and for each
+  // fact whichever record has seen it more. Used once per device and account.
+  function mergeProgress(a, b) {
+    const x = normalize(a);
+    const y = normalize(b);
+    const out = normalize({ ...y, ...x });
+    out.wallet = Math.max(x.wallet, y.wallet);
+    out.earned = Math.max(x.earned, y.earned);
+    out.unlocks = [...new Set([...y.unlocks, ...x.unlocks])];
+    out.achievements = { ...y.achievements };
+    for (const [id, t] of Object.entries(x.achievements)) out.achievements[id] = out.achievements[id] ? Math.min(out.achievements[id], t) : t;
+    const maxOf = (p, q) => {
+      const r = { ...q };
+      for (const [k, v] of Object.entries(p)) r[k] = typeof v === 'number' ? Math.max(v, Number(r[k]) || 0) : r[k] ?? v;
+      return r;
+    };
+    out.counters = maxOf(x.counters, y.counters);
+    out.stickers = maxOf(x.stickers, y.stickers);
+    out.boardWins = maxOf(x.boardWins, y.boardWins);
+    out.checkIn = (x.checkIn.last || '') >= (y.checkIn.last || '') ? x.checkIn : y.checkIn;
+    out.facts = {};
+    for (const key of new Set([...Object.keys(x.facts), ...Object.keys(y.facts)])) {
+      const fx = (x.facts[key] || { facts: {} }).facts;
+      const fy = (y.facts[key] || { facts: {} }).facts;
+      const facts = {};
+      for (const k of new Set([...Object.keys(fx), ...Object.keys(fy)])) {
+        facts[k] = ((fx[k] && fx[k].asked) || 0) >= ((fy[k] && fy[k].asked) || 0) ? fx[k] : fy[k];
+      }
+      out.facts[key] = { ...(y.facts[key] || {}), ...(x.facts[key] || {}), facts };
+    }
+    const seen = new Set();
+    out.activity = [...(y.activity || []), ...(x.activity || [])]
+      .filter((e) => {
+        const k = JSON.stringify(e);
+        return !seen.has(k) && seen.add(k);
+      })
+      .sort((p, q) => p.t - q.t)
+      .slice(-ACTIVITY_LIMIT);
+    out.cheats = {}; // cheats stay on the device that typed them
+    return out;
+  }
+
+  // The facts of the player on this device ("You"), for account stats.
+  const ownFacts = (state) => ((state && state.facts && state.facts[playerKey('You')]) || { facts: {} }).facts;
+
+  // Counts by status over 1..size × 1..size, plus the facts that need practice.
+  function factSummary(state, size = 12) {
+    const facts = ownFacts(state);
+    const counts = { mastered: 0, learning: 0, practice: 0, unseen: 0 };
+    const needsPractice = [];
+    for (let a = 1; a <= size; a++) {
+      for (let b = 1; b <= size; b++) {
+        const status = factStatus(facts[factKey(a, b)]);
+        counts[status]++;
+        if (status === 'practice') needsPractice.push(factKey(a, b));
+      }
+    }
+    return { ...counts, total: size * size, size, needsPractice };
+  }
+
+  // ---- homework goals
+  // { type: 'master', table: 7 }                          every 7 × 1…10 and 1…10 × 7 fact mastered
+  // { type: 'practice', rounds: 3, difficulty: 'medium' }  finish rounds (difficulty 'any' for any)
+  // { type: 'win', size: 8, difficulty?: 'any' }            beat the CPU on a board this big or bigger
+  // { type: 'games', games: 5 }                            finish games (any kind)
+  // Rounds, wins and games count from when the homework was set.
+  const HOMEWORK_TABLE_UPTO = 10;
+  const HOMEWORK_TYPES = ['master', 'practice', 'win', 'games'];
+  const DIFF_NAME = (d) => (d && d !== 'any' ? `${TIMER_DIFFICULTY_NAMES[d] || d} ` : '');
+
+  // A clean copy of a goal, or null if it isn't one.
+  function cleanGoal(goal) {
+    if (!goal || !HOMEWORK_TYPES.includes(goal.type)) return null;
+    const int = (v, lo, hi) => (Number.isInteger(Number(v)) && Number(v) >= lo && Number(v) <= hi ? Number(v) : null);
+    const diff = (d) => (d === undefined || d === 'any' ? 'any' : DIFFICULTIES.includes(d) ? d : null);
+    if (goal.type === 'master') {
+      const table = int(goal.table, 1, 12);
+      return table ? { type: 'master', table } : null;
+    }
+    if (goal.type === 'practice') {
+      const rounds = int(goal.rounds, 1, 50);
+      const difficulty = diff(goal.difficulty);
+      return rounds && difficulty ? { type: 'practice', rounds, difficulty } : null;
+    }
+    if (goal.type === 'win') {
+      const size = int(goal.size, 6, 30);
+      const difficulty = diff(goal.difficulty);
+      return size && difficulty ? { type: 'win', size, difficulty } : null;
+    }
+    const games = int(goal.games, 1, 50);
+    return games ? { type: 'games', games } : null;
+  }
+
+  function describeGoal(goal) {
+    if (goal.type === 'master') return `Master the ×${goal.table} table`;
+    if (goal.type === 'practice') return `Finish ${goal.rounds} ${DIFF_NAME(goal.difficulty)}practice ${goal.rounds === 1 ? 'round' : 'rounds'}`;
+    if (goal.type === 'win') return `Beat the CPU on ${DIFF_NAME(goal.difficulty)}${goal.size}×${goal.size} or bigger`;
+    return `Finish ${goal.games} ${goal.games === 1 ? 'game' : 'games'}`;
+  }
+
+  // How far along it is: { have, need, done } (from the save and when it was set).
+  function goalProgress(state, goal, since = 0) {
+    const after = ((state && state.activity) || []).filter((e) => e.t >= since);
+    const diffOk = (e) => goal.difficulty === 'any' || !goal.difficulty || e.difficulty === goal.difficulty;
+    let have = 0;
+    let need = 1;
+    if (goal.type === 'master') {
+      const facts = ownFacts(state);
+      const keys = new Set();
+      for (let n = 1; n <= HOMEWORK_TABLE_UPTO; n++) keys.add(factKey(goal.table, n)).add(factKey(n, goal.table));
+      need = keys.size;
+      have = [...keys].filter((k) => factStatus(facts[k]) === 'mastered').length;
+    } else if (goal.type === 'practice') {
+      need = goal.rounds;
+      have = after.filter((e) => e.kind === 'practice' && e.finished && diffOk(e)).length;
+    } else if (goal.type === 'win') {
+      have = after.some((e) => e.kind === 'game' && e.won && e.size >= goal.size && diffOk(e)) ? 1 : 0;
+    } else {
+      need = goal.games;
+      have = after.filter((e) => e.kind === 'game' || e.kind === 'class').length;
+    }
+    return { have: Math.min(have, need), need, done: have >= need };
+  }
+
+  // Full status for a list: 'done', 'late' (past the due date) or 'open'.
+  // due is 'YYYY-MM-DD' (the end of that day counts); today likewise.
+  function homeworkStatus(state, assignment, today) {
+    const p = goalProgress(state, assignment.goal, assignment.createdAt || 0);
+    const status = p.done ? 'done' : assignment.due && today && today > assignment.due ? 'late' : 'open';
+    return { ...p, status, label: describeGoal(assignment.goal) };
+  }
+
   const api = {
     createProgress,
     normalize,
@@ -717,6 +865,15 @@
     practiceCountId,
     practiceExpertId,
     practiceSet,
+    noteActivity,
+    mergeProgress,
+    factSummary,
+    cleanGoal,
+    describeGoal,
+    goalProgress,
+    homeworkStatus,
+    HOMEWORK_TYPES,
+    HOMEWORK_TABLE_UPTO,
     CHEAT_CODES,
     cheatOn,
     cheatOff,
