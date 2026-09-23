@@ -1,0 +1,113 @@
+# Words students can't use as their name in a class (server/moderation.js).
+# One per line, lower case. A line starting with "=" only matches a whole word
+# (for short words that hide inside real names, like "ass" in "Cassandra");
+# other lines match anywhere in the name, after undoing tricks like "f.u.c.k",
+# "sh1t" or "fuuuck". Lines starting with # are comments.
+#
+# Real names that contain one of these are allowed in moderation.js (ALLOW).
+
+# swearing
+fuck
+=fuk
+fuq
+phuck
+shit
+sh1t
+bitch
+biatch
+bastard
+bollock
+bullshit
+crap
+damn
+=hell
+piss
+=ass
+asshole
+=arse
+arsehole
+jackass
+dumbass
+wanker
+wank
+twat
+prick
+bugger
+motherf
+
+# body parts and sex
+dick
+cock
+penis
+vagina
+pussy
+=cum
+=cumming
+=tit
+tits
+titty
+boob
+nipple
+=anal
+=anus
+=butt
+butthole
+buttface
+butthead
+buttcheek
+buttplug
+dildo
+horny
+porn
+sexy
+=sex
+sexx
+orgasm
+=nude
+nudes
+naked
+=rape
+rapist
+molest
+pedo
+paedo
+=hoe
+=hoes
+whore
+slut
+=thot
+=milf
+=nsfw
+
+# slurs and hate
+nigg
+nigga
+=negro
+faggot
+=fag
+=fags
+retard
+tranny
+spastic
+=spaz
+=chink
+gook
+kike
+wetback
+beaner
+=coon
+=dyke
+=nazi
+hitler
+=kkk
+
+# mean
+=kys
+killyourself
+=stupid
+idiot
+=loser
+=poop
+poopy
+=pee
+=fart

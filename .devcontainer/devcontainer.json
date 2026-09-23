@@ -3,16 +3,18 @@
 {
 	"name": "Node.js & TypeScript",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/typescript-node:5-24-trixie"
+	"image": "mcr.microsoft.com/devcontainers/typescript-node:5-24-trixie",
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+	// The classroom server (npm run classroom)
+	"forwardPorts": [8080],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "yarn install",
+	// Playwright + Chromium for the browser tests, and cloudflared for tunnels
+	"postCreateCommand": "bash .devcontainer/postCreateCommand.sh"
 
 	// Configure tool-specific properties.
 	// "customizations": {},

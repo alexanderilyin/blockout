@@ -133,8 +133,51 @@
     return 1 + Math.floor(rng() * sides);
   }
 
-  // Difficulty sets the dice: easy d6, medium d8, hard d12.
-  const DIFFICULTY_SIDES = { easy: 6, medium: 8, hard: 12 };
+  // Difficulty sets the dice: easy d6, medium d8, hard d12. After Hard the
+  // facts stay within the times table (or just past it) but get harder:
+  //   tricky  12-sided dice without the giveaways (no ×1, ×2, ×5, ×10, ×11)
+  //   master  12-sided dice that lean towards the player's weakest facts
+  //   legend  two-digit × one-digit: 11–19 on one die, 2–9 on the other
+  // DIFFICULTY_SIDES is the biggest face (numbered dice, fit maths).
+  const DIFFICULTIES = ['easy', 'medium', 'hard', 'tricky', 'master', 'legend'];
+  const DIFFICULTY_SIDES = { easy: 6, medium: 8, hard: 12, tricky: 12, master: 12, legend: 19 };
+  const TRICKY_FACES = [3, 4, 6, 7, 8, 9, 12];
+  const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+  // The faces of each die: { a: [...], b: [...] } (the same for both except Legend).
+  function diceFaces(difficulty) {
+    if (difficulty === 'tricky') return { a: TRICKY_FACES, b: TRICKY_FACES };
+    if (difficulty === 'legend') return { a: range(11, 19), b: range(2, 9) };
+    const n = DIFFICULTY_SIDES[difficulty] || 6;
+    return { a: range(1, n), b: range(1, n) };
+  }
+
+  // The new difficulties roll both dice at once from a list of pairs (Legend's
+  // dice differ; Master weights each fact). Easy/Medium/Hard use createDice.
+  const usesPairDice = (difficulty) => ['tricky', 'master', 'legend'].includes(difficulty);
+
+  // weight(a, b): how likely a roll is (Master: weak facts more), default even.
+  // Pairs that can't fit the board at all are left out (Legend on small boards).
+  function createPairDice(boardSize, rng = Math.random, difficulty = 'tricky', weight = null) {
+    const { a: A, b: B } = diceFaces(difficulty);
+    const pairs = [];
+    for (const a of A) for (const b of B) if (a <= boardSize && b <= boardSize) pairs.push([a, b]);
+    const w = weight || (() => 1);
+    return {
+      sides: DIFFICULTY_SIDES[difficulty],
+      pairs,
+      // a weighted pick from `from` (default: every pair)
+      rollPair(from = pairs) {
+        const total = from.reduce((sum, [a, b]) => sum + w(a, b), 0);
+        let r = rng() * total;
+        for (const [a, b] of from) if ((r -= w(a, b)) <= 0) return [a, b];
+        return from[from.length - 1];
+      },
+    };
+  }
+
+  // Can a difficulty be played on this board at all? (Legend needs 11×11 or bigger.)
+  const fitsDifficulty = (difficulty, boardSize) => !usesPairDice(difficulty) || createPairDice(boardSize, Math.random, difficulty).pairs.length > 0;
 
   // "Loaded" dice matched to the board size, so small boards aren't swallowed
   // by huge rectangles and big boards don't take ages to fill with 1x1s.
@@ -229,6 +272,12 @@
   // can't produce a fitting roll, pick one of the fitting rolls at random.
   function rollForBoard(board, bag, rng = Math.random, mode = 'end') {
     const sides = bag.sides || 6;
+    if (bag.rollPair) {
+      // pair dice: near the end (or always), only pairs that fit
+      if (!fitOnlyNow(board, sides, mode)) return bag.rollPair();
+      const fitting = bag.pairs.filter(([a, b]) => canFit(board, a, b));
+      return fitting.length ? bag.rollPair(fitting) : bag.rollPair();
+    }
     if (!fitOnlyNow(board, sides, mode)) return [bag.roll(), bag.roll()];
     const fitting = fittingRolls(board, sides);
     if (!fitting.length) return [bag.roll(), bag.roll()];
@@ -255,7 +304,13 @@
     emptyCount,
     chooseComputerMove,
     rollDie,
+    DIFFICULTIES,
     DIFFICULTY_SIDES,
+    TRICKY_FACES,
+    diceFaces,
+    usesPairDice,
+    createPairDice,
+    fitsDifficulty,
     diceProfile,
     createDice,
     FIT_MODES,

@@ -59,3 +59,10 @@ test('seeded random repeats exactly for the same seed', () => {
   assert.notDeepEqual(seqA, Array.from({ length: 5 }, c));
   for (const x of seqA) assert.ok(x >= 0 && x < 1);
 });
+
+test('invites: difficulties after Hard, and Legend only on a board it fits', () => {
+  for (const difficulty of ['tricky', 'master', 'legend']) {
+    assert.ok(I.validate({ ...sample, b: 12, s: { ...sample.s, difficulty } }), difficulty);
+  }
+  assert.equal(I.validate({ ...sample, b: 8, s: { ...sample.s, difficulty: 'legend' } }), null);
+});
